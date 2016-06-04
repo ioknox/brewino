@@ -1,4 +1,7 @@
 #include <SPI.h>
+#include <SparkFunMAX31855k.h>
+
+#include <SPI.h>
 #include <TFT.h>
 #include <PID_v1.h>
 #include <Servo.h>
@@ -7,11 +10,11 @@
 #include "TempSensor.h"
 #include "Label.h"
 
-#define CS   10
-#define DC   9
-#define RESET  8
+#define TFT_CS    19
+#define TFT_DC    9
+#define TFT_RESET 8
 
-#define RATE 100L
+#define TC_CS     10
 
 enum ButtonsEnum
 {
@@ -21,71 +24,6 @@ enum ButtonsEnum
   DownButton = 4,
   RightButton = 8
 };
-
-/*
-  class TextBox : public Label
-  {
-  public:
-    TextBox(const Point &pt, const Color &foreColor)
-      : Label(pt, foreColor), _currentPart(-1)
-    {
-      // Nothing to do...
-    }
-
-    virtual void draw(TFT &hw)
-    {
-      Label::draw(hw);
-
-      if (_currentPart >= 0)
-      {
-        int x =
-        hw.noStroke();
-        hw.fill(_foreColor.r, _foreColor.g, _foreColor.b);
-        hw.rect(_position.x + _fontSize * 5, _position.y, _fontSize * 5, _fontSize * 8);
-        hw.noFill();
-        hw.setTextSize(_fontSize);
-        hw.stroke(_backColor.r, _backColor.g, _backColor.b);
-        hw.text(charBuffer, _position.x + _fontSize * 5 * _currentPart, _position.y);
-      }
-    }
-
-    void setEditMode(bool edition)
-    {
-      if (edition && _currentPart < 0)
-      {
-        _currentPart = 0;
-      }
-      else
-      {
-        _currentPart = -1;
-      }
-    }
-
-    void moveLeft()
-    {
-
-    }
-
-    void moveRight()
-    {
-
-    }
-
-    void next()
-    {
-
-    }
-
-    void previous()
-    {
-
-    }
-
-  private:
-    int _currentPart;
-    float _value;
-  };*/
-
 
 class Screen
 {
@@ -131,6 +69,18 @@ class Screen
       if (_editDigit >= 0) {
         _editLabel.draw(hw);
       }
+
+      hw.stroke(255, 255, 255);
+      if (_aliveFlag)
+      {
+        hw.fill(255, 255, 255);
+      }
+      else
+      {
+        hw.fill(0, 0, 0);
+      }
+      hw.rect(150, 120, 8, 8);
+      _aliveFlag = !_aliveFlag;
     }
 
     void setOutput(float output)
@@ -205,63 +155,13 @@ class Screen
       _editLabel.setValue(_editDigit);
     }
 
-    /*
-      void editConsign(float consign)
-      {
-      _editPos = 0;
-      _editValue = consign;
-
-      refreshEditConsign();
-      }
-
-      int editDigit()
-      {
-      return (int)(_editValue * pow(10, _editPos + 1)) % 10;
-      }
-
-      void refreshEditConsign()
-      {
-      int digit = ;
-      _editLabel.setValue(digit);
-      Point pt(_consignLabel.position());
-      pt.x = _editLabel.fontSize() * 6 * (_consignLabel.value().length() - (_editPos + 1));
-      _editLabel.setPosition(pt);
-      }
-
-      void moveEditPos()
-      {
-      _editPos = (_editPos + 1);
-      refreshEditConsign();
-      }
-
-      void incEditValue()
-      {
-      _editDigit = (_editDigit + 1) % 10;
-      _editLabel.setValue(_editDigit);
-      }
-
-      void decEditValue()
-      {
-      _editDigit--;
-      if (_editDigit < 0)
-      {
-        _editDigit = 10 + _editDigit;
-      }
-      _editLabel.setValue(_editDigit);
-      }
-
-      float editValue()
-      {
-      return _editValue;
-      }
-    */
-
   private:
     Label _consignLabel;
     Label _editLabel;
     Label _currentTempLabel;
     Label _outputLabel;
     short _editDigit;
+    bool _aliveFlag;
 };
 
 #define DEBOUNCE_DELAY 50
@@ -366,9 +266,9 @@ class KeyPad
     KeyPad()
     {
       _buttons[0] = new Button(2);
-      _buttons[1] = new Button(3);
-      _buttons[2] = new Button(4);
-      _buttons[3] = new Button(5);
+      _buttons[1] = new Button(4);
+      _buttons[2] = new Button(5);
+      _buttons[3] = new Button(6);
     }
 
     void loop()
@@ -494,18 +394,16 @@ class Program
     Program()
       : _p(2), _i(5), _d(1),
         _input(0), _output(0), _consign(0),
-        _tft(CS, DC, RESET),
-        _tempSensor(A1, 3300.0f),
-        _pid(&_input, &_output, &_consign, _p, _i, _d, DIRECT)
+        _tft(TFT_CS, TFT_DC, TFT_RESET),
+        _pid(&_input, &_output, &_consign, _p, _i, _d, DIRECT),
+        _tc(TC_CS)
     {
       // Nothing to do...
     }
 
     void setup() {
-      Serial.begin(9600);
-  
-      analogReference(EXTERNAL);
-
+      Serial.begin(57600);
+    
       _tft.begin();
       _tft.background(0, 0, 0);
 
@@ -516,7 +414,7 @@ class Program
       _output = 0.0;
       _consign = 32.0;
 
-      myservo.attach(6);
+      myservo.attach(3);
 
       _state = prg::Idle;
     }
@@ -545,10 +443,10 @@ class Program
     }
 
     void longTask() {
-      _tempSensor.loop();
-
-      _input = _tempSensor.value();
+      _input = _tc.readTempC();
       _pid.Compute();
+
+      Serial.println(_input);
 
       myservo.write((int)_output);
 
@@ -566,10 +464,10 @@ class Program
     double _consign;
     double _output;
     TFT _tft;
-    TempSensor _tempSensor;
     Screen _mainScreen;
     KeyPad _keyPad;
     PID _pid;
+    SparkFunMAX31855k _tc;
     prg::StateEnum _state;
 };
 
