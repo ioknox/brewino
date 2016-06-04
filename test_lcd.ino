@@ -267,8 +267,8 @@ class KeyPad
     {
       _buttons[0] = new Button(2);
       _buttons[1] = new Button(4);
-      _buttons[2] = new Button(5);
-      _buttons[3] = new Button(6);
+      _buttons[2] = new Button(6);
+      _buttons[3] = new Button(5);
     }
 
     void loop()
@@ -333,18 +333,26 @@ class UpdateConsignStateMachine
         else if ((shortEvt & UpButton) != 0)
         {
           screen.incEditDigit();
-          changeModifiedConsign(consign, screen);
         }
         else if ((shortEvt & DownButton) != 0)
         {
           screen.decEditDigit();
-          changeModifiedConsign(consign, screen);
         }
         else if ((shortEvt & RightButton) != 0)
         {
           changeModifiedConsign(consign, screen);
           nextDigit();
           editConsign(consign, screen);
+        }
+
+        if (shortEvt != NoButton || longEvt != NoButton)
+        {
+          Serial.print("consign:");
+          Serial.print(consign);
+          Serial.print(" state:");
+          Serial.println(_editState);
+          Serial.print(" init:");
+          Serial.println(_editInit);
         }
       }
 
@@ -395,8 +403,7 @@ class Program
       : _p(2), _i(5), _d(1),
         _input(0), _output(0), _consign(0),
         _tft(TFT_CS, TFT_DC, TFT_RESET),
-        _pid(&_input, &_output, &_consign, _p, _i, _d, DIRECT),
-        _tc(TC_CS)
+        _pid(&_input, &_output, &_consign, _p, _i, _d, DIRECT)
     {
       // Nothing to do...
     }
@@ -406,6 +413,8 @@ class Program
     
       _tft.begin();
       _tft.background(0, 0, 0);
+
+      analogReference(EXTERNAL);
 
       _pid.SetOutputLimits(0.0, 2000.0);
       _pid.SetMode(AUTOMATIC);
@@ -425,6 +434,14 @@ class Program
       ButtonsEnum longEvt = _keyPad.event(LongKeyDown);
       ButtonsEnum shortEvt = _keyPad.event(ShortKeyUp);
 
+      if (shortEvt != NoButton || longEvt != NoButton)
+      {
+        Serial.print("LONG:");
+        Serial.print(longEvt);
+        Serial.print(" SHORT:");
+        Serial.println(shortEvt);
+      }
+
       switch (_state)
       {
         case prg::Idle:
@@ -443,12 +460,12 @@ class Program
     }
 
     void longTask() {
-      _input = _tc.readTempC();
+      float voltage = (analogRead(A3) * 3.3f) / 1024.0f;
+      _input = (voltage - 0.5f) * 100.0f;
+      Serial.println(_input);
       _pid.Compute();
 
-      Serial.println(_input);
-
-      myservo.write((int)_output);
+      myservo.write(map(_output, 0, 2000, 0, 100));
 
       _mainScreen.setConsign(_consign);
       _mainScreen.setTemp(_input);
@@ -467,7 +484,6 @@ class Program
     Screen _mainScreen;
     KeyPad _keyPad;
     PID _pid;
-    SparkFunMAX31855k _tc;
     prg::StateEnum _state;
 };
 
