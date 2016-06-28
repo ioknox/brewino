@@ -22,24 +22,27 @@ class Label
 {
   public:
     Label(byte size, byte decimals, const Point &pt, const Color &foreColor);
+    
+    inline const String& value() { return _value; }
+    inline const Point& position() { return _position; }
+    inline const Color& foreColor() { return _foreColor; }
+    inline const Color& backColor() { return _backColor; }
+    inline const int size() { return _size; }
+    inline const int decimals() { return _decimals; }
+    inline const bool requireRefresh() { return _requireRefresh; }
+    inline const FontSize fontSize() { return _fontSize; }
+
     void setValue(float value);
     void setValue(int value);
     void setValue(const String& value);
-    inline const String& value() { return _value; }
-    inline const Point& position() { return _position; }
-    inline void setPosition(const Point &position) { _position = position; }
-    inline const Color& foreColor() { return _foreColor; }
-    inline void setForeColor(const Color& foreColor) { _foreColor = foreColor; }
-    inline const Color& backColor() { return _backColor; }
-    inline void setBackColor(const Color& backColor) { _backColor = backColor; }
-    inline int size() { return _size; }
-    inline int decimals() { return _decimals; }
-    inline bool requireRefresh() { return _requireRefresh; }
-    inline bool setRequireRefresh(bool refresh) { _requireRefresh = refresh; }
-    FontSize fontSize();
+    void setPosition(const Point &position);
+    void setForeColor(const Color& foreColor);
+    void setBackColor(const Color& backColor);
+    bool setRequireRefresh(bool refresh);
     void setFontSize(FontSize fontSize);
+    
     virtual void draw(TFT &hw);
-  
+    
   private:
     Point _position;
     Color _foreColor;

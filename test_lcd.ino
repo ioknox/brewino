@@ -51,14 +51,9 @@ class Screen
     virtual void draw(TFT &hw)
     {
       if (_editDigit >= 0) {
-        if (_consignLabel.requireRefresh())
+        if (_consignLabel.requireRefresh() && _editDigit >= 0)
         {
           _editLabel.setRequireRefresh(true);
-        }
-
-        if (_editLabel.requireRefresh())
-        {
-          _consignLabel.setRequireRefresh(true);
         }
       }
 
@@ -125,6 +120,7 @@ class Screen
       }
 
       pt.x = _editLabel.fontSize() * 6 * pos;
+      _consignLabel.setRequireRefresh(true);
       _editLabel.setPosition(pt);
     }
 
@@ -153,6 +149,7 @@ class Screen
     {
       _editDigit = -1;
       _editLabel.setValue(_editDigit);
+      _consignLabel.setRequireRefresh(true);
     }
 
   private:
@@ -164,7 +161,7 @@ class Screen
     bool _aliveFlag;
 };
 
-#define DEBOUNCE_DELAY 50
+#define DEBOUNCE_DELAY 30
 #define LONG_PRESSED 1000
 
 enum KeyEvent
@@ -328,6 +325,7 @@ class UpdateConsignStateMachine
         }
         else if ((shortEvt & SetButton) != 0)
         {
+          changeModifiedConsign(consign, screen);
           _running = false;
         }
         else if ((shortEvt & UpButton) != 0)
@@ -344,6 +342,8 @@ class UpdateConsignStateMachine
           nextDigit();
           editConsign(consign, screen);
         }
+
+        
 
         if (shortEvt != NoButton || longEvt != NoButton)
         {
@@ -462,7 +462,6 @@ class Program
     void longTask() {
       float voltage = (analogRead(A3) * 3.3f) / 1024.0f;
       _input = (voltage - 0.5f) * 100.0f;
-      Serial.println(_input);
       _pid.Compute();
 
       myservo.write(map(_output, 0, 2000, 0, 100));
@@ -492,7 +491,7 @@ void longCallback();
 
 Program prog;
 Scheduler sched;
-Task shortTask(10, TASK_FOREVER, &shortCallback);
+Task shortTask(5, TASK_FOREVER, &shortCallback);
 Task longTask(500, TASK_FOREVER, &longCallback);
 
 void shortCallback()

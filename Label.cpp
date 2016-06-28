@@ -50,9 +50,28 @@ void Label::setValue(const String& value)
   }
 }
 
-FontSize Label::fontSize()
+void Label::setPosition(const Point &position)
 {
-  return _fontSize;
+  _position = position;
+  _requireRefresh = true;
+}
+
+void Label::setForeColor(const Color& foreColor)
+{
+  _foreColor = foreColor;
+  _requireRefresh = true;
+}
+
+void Label::setBackColor(const Color& backColor)
+{
+  _backColor = backColor;
+  _requireRefresh = true;
+}
+
+bool Label::setRequireRefresh(bool refresh)
+{
+  _requireRefresh = refresh;
+  _requireRefresh = true;
 }
 
 void Label::setFontSize(FontSize fontSize)
