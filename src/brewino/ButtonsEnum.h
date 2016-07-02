@@ -1,3 +1,6 @@
+#ifndef __BREWINO_BUTTONSENUM_H__
+#define __BREWINO_BUTTONSENUM_H__
+
 enum ButtonsEnum
 {
   NoButton = 0,
@@ -6,3 +9,5 @@ enum ButtonsEnum
   DownButton = 4,
   RightButton = 8
 };
+
+#endif

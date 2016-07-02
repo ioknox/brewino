@@ -1,11 +1,17 @@
 #include <Arduino.h>
 
-
 #include <SPI.h>
 #include <TFT.h>
 #include <PID_v1.h>
 #include <Servo.h>
 #include <TaskScheduler.h>
+#include <Fsm.h>
+
+#define SELECT_EVENT 1
+#define CANCEL_EVENT 2
+#define UP_EVENT 3
+#define DOWN_EVENT 4
+#define BACK_EVENT 5
 
 #define TFT_CS    19
 #define TFT_DC    9
@@ -14,151 +20,254 @@
 #define TC_CS     10
 
 #include <brewino/Screen.h>
+#include <brewino/KeyPad.h>
+#include <brewino/Settings.h>
 
+Servo myservo;
+int val;
 
-#define DEBOUNCE_DELAY 30
-#define LONG_PRESSED 1000
+State idle(NULL, NULL);
+Fsm screenFsm(&idle);
 
-enum KeyEvent
+void shortCallback();
+void longCallback();
+
+Scheduler sched;
+Task shortTask(5, TASK_FOREVER, &shortCallback);
+Task longTask(500, TASK_FOREVER, &longCallback);
+
+double input = 0.0;
+double output = 0.0;
+Settings settings;
+KeyPad keyPad;
+Screen mainScreen;
+
+TFT tft(TFT_CS, TFT_DC, TFT_RESET);
+PID pid(
+  &input,
+  &output,
+  &settings.consign,
+  settings.proportional,
+  settings.integral,
+  settings.derivate,
+  DIRECT
+);
+
+void shortCallback()
 {
-  NoKeyEvent,
-  ShortKeyUp,
-  LongKeyDown
-};
+  keyPad.loop();
 
-class Button
-{
-  public:
-    Button(int pin)
-      : _pin(pin),
-        _lastReading(0),
-        _longKeyDownSignaled(false),
-        _event(NoKeyEvent),
-        _duration(0),
-        _highSince(0),
-        _lowSince(0),
-        _lastChanged(0)
-    {
-      unsigned long now(millis());
+  ButtonsEnum longEvt = keyPad.event(LongKeyDown);
+  ButtonsEnum shortEvt = keyPad.event(ShortKeyUp);
 
-      _highSince = now;
-      _lowSince = now;
-      _lastChanged = now;
-      loop();
-
-      pinMode(pin, INPUT);
-    }
-
-    void loop()
-    {
-      unsigned long now(millis());
-      int reading = digitalRead(_pin);
-
-      _event = NoKeyEvent;
-
-      if (now - _lastChanged > DEBOUNCE_DELAY)
-      {
-        if (_lastReading == LOW && _lowSince <= _highSince)
-        {
-          _lowSince = now;
-          _duration = _lowSince - _highSince;
-
-          if (_duration < LONG_PRESSED)
-          {
-            _event = ShortKeyUp;
-          }
-        }
-        else if (_lastReading == HIGH)
-        {
-          if (_highSince <= _lowSince)
-          {
-            _longKeyDownSignaled = false;
-            _highSince = now;
-          }
-
-          _duration = now - _highSince;
-
-          if (_duration >= LONG_PRESSED && !_longKeyDownSignaled)
-          {
-            _event = LongKeyDown;
-            _longKeyDownSignaled = true;
-          }
-        }
-      }
-
-      if (reading != _lastReading)
-      {
-        _lastChanged = now;
-        _lastReading = reading;
-      }
-    }
-
-    KeyEvent event()
-    {
-      return _event;
-    }
-
-  private:
-    int _pin;
-    int _lastReading;
-    bool _longKeyDownSignaled;
-    KeyEvent _event;
-    unsigned long _duration;
-    unsigned long _highSince;
-    unsigned long _lowSince;
-    unsigned long _lastChanged;
-
-};
-
-#define KEYPAD_BUTTONS 4
-
-class KeyPad
-{
-  public:
-    KeyPad()
-    {
-      _buttons[0] = new Button(2);
-      _buttons[1] = new Button(4);
-      _buttons[2] = new Button(6);
-      _buttons[3] = new Button(5);
-    }
-
-    void loop()
-    {
-      for (int i = 0; i < KEYPAD_BUTTONS; i++)
-      {
-        _buttons[i]->loop();
-      }
-    }
-
-    ButtonsEnum event(KeyEvent keyEvent)
-    {
-      int matchButtons = 0;
-
-      for (int i = 0; i < KEYPAD_BUTTONS; i++)
-      {
-        if (_buttons[i]->event() == keyEvent)
-        {
-          matchButtons |= (1 << i);
-        }
-      }
-
-      return (ButtonsEnum)matchButtons;
-    }
-
-  private:
-    Button *_buttons[4];
-};
-
-namespace prg
-{
-  enum StateEnum
+  if (shortEvt != NoButton || longEvt != NoButton)
   {
-    Idle,
-    EditConsign
-  };
+    Serial.print("LONG:");
+    Serial.print(longEvt);
+    Serial.print(" SHORT:");
+    Serial.println(shortEvt);
+  }
+
+  if ((longEvt & SetButton) != 0)
+  {
+    screenFsm.trigger(CANCEL_EVENT);
+  }
+  else if ((shortEvt & SetButton) != 0)
+  {
+    screenFsm.trigger(SELECT_EVENT);
+  }
+  else if ((shortEvt & UpButton) != 0)
+  {
+    screenFsm.trigger(UP_EVENT);
+  }
+  else if ((shortEvt & DownButton) != 0)
+  {
+    screenFsm.trigger(DOWN_EVENT);
+  }
+  else if ((shortEvt & RightButton) != 0)
+  {
+    screenFsm.trigger(BACK_EVENT);
+  }
 }
 
+void longCallback()
+{
+  float voltage = (analogRead(A3) * 3.3f) / 1024.0f;
+  input = (voltage - 0.5f) * 100.0f;
+  pid.Compute();
+
+  myservo.write(map(output, 0, 2000, 0, 100));
+
+  mainScreen.setConsign(settings.consign);
+  mainScreen.setTemp(input);
+  mainScreen.setOutput(output);
+  mainScreen.draw(tft);
+}
+
+class ConsignManager
+{
+public:
+  static void enter()
+  {
+    Serial.println(" *** ENTER EDIT CONSIGN *** ");
+    _originalConsign = settings.consign;
+    _editState = 0;
+    editConsign(settings.consign, mainScreen);
+  }
+
+  static void commit()
+  {
+    Serial.println(" *** COMIT CONSIGN *** ");
+    changeModifiedConsign(settings.consign, mainScreen);
+    mainScreen.disableEdit();
+  }
+
+  static void rollback()
+  {
+    Serial.println(" *** ROLLBACK CONSIGN *** ");
+    settings.consign = _originalConsign;
+    mainScreen.disableEdit();
+  }
+
+  static void up()
+  {
+    Serial.println(" *** UP *** ");
+    mainScreen.incEditDigit();
+  }
+
+  static void down()
+  {
+    Serial.println(" *** DOWN *** ");
+    mainScreen.decEditDigit();
+  }
+
+  static void next()
+  {
+    Serial.println(" *** NEXT *** ");
+    changeModifiedConsign(settings.consign, mainScreen);
+    nextDigit();
+    editConsign(settings.consign, mainScreen);
+  }
+
+private:
+  static double _originalConsign;
+  static short _editState;
+  static short _editInit;
+
+  static void changeModifiedConsign(double &consign, Screen &screen)
+  {
+    consign += (screen.editDigit() - _editInit) * pow(10.0, _editState - 1);
+  }
+
+  static void nextDigit()
+  {
+    _editState = (_editState + 1) % 4;
+  }
+
+  static void editConsign(double &consign, Screen &screen)
+  {
+    _editInit = (short)(consign / pow(10.0, _editState - 1)) % 10;
+    screen.editConsign(_editInit, _editState - 1);
+  }
+};
+
+double ConsignManager::_originalConsign = 0.0;
+short ConsignManager::_editState = 0;
+short ConsignManager::_editInit = 0;
+
+class MainMenu
+{
+public:
+  void exit()
+  {
+
+  }
+
+  void begin()
+  {
+  }
+
+  void select()
+  {
+  }
+
+  void back()
+  {
+  }
+};
+
+MainMenu mainMenuInstance;
+
+template <typename TClass>
+class Delegate
+{
+public:
+  typedef void (*TCallback)();
+  typedef void (TClass::* TMember)();
+  Delegate(TMember callback, TClass *instance)
+  {
+    _instance = instance;
+    _callback = callback;
+  }
+
+  TCallback get()
+  {
+    return (TCallback)this;
+  }
+
+  void operator()()
+  {
+    _callback(_instance);
+  }
+
+private:
+  TClass *_instance;
+  TMember _callback;
+};
+
+Delegate<MainMenu> mainMenuDelegate(&MainMenu::begin, &mainMenuInstance);
+
+State mainMenu(NULL, NULL);
+State editConsign(NULL, NULL);
+State editSettings(NULL, NULL);
+
+void setup() {
+  screenFsm.add_transition(&idle, &mainMenu, SELECT_EVENT, mainMenuDelegate.get());
+  screenFsm.add_transition(&editConsign, &idle, SELECT_EVENT, &ConsignManager::commit);
+  screenFsm.add_transition(&editConsign, &idle, CANCEL_EVENT, &ConsignManager::rollback);
+  screenFsm.add_transition(&editConsign, &editConsign, UP_EVENT, &ConsignManager::up);
+  screenFsm.add_transition(&editConsign, &editConsign, DOWN_EVENT, &ConsignManager::down);
+  screenFsm.add_transition(&editConsign, &editConsign, BACK_EVENT, &ConsignManager::next);
+
+  Serial.begin(57600);
+
+  tft.begin();
+  tft.background(0, 0, 0);
+
+  analogReference(EXTERNAL);
+
+  pid.SetOutputLimits(0.0, 2000.0);
+  pid.SetMode(AUTOMATIC);
+
+  input = 0.0;
+  output = 0.0;
+  //consign = 32.0;
+
+  myservo.attach(3);
+
+  sched.init();
+  sched.addTask(shortTask);
+  sched.addTask(longTask);
+  shortTask.enable();
+  longTask.enable();
+}
+
+void loop()
+{
+  sched.execute();
+}
+
+/*
 class UpdateConsignStateMachine
 {
   public:
@@ -246,10 +355,8 @@ double UpdateConsignStateMachine::_originalConsign = 0.0;
 bool UpdateConsignStateMachine::_running = false;
 short UpdateConsignStateMachine::_editState = 0;
 short UpdateConsignStateMachine::_editInit = 0;
-
-Servo myservo;
-int val;
-
+*/
+/*
 class Program
 {
   public:
@@ -283,11 +390,12 @@ class Program
       _state = prg::Idle;
     }
 
-    void shortTask() {
-      _keyPad.loop();
+    static void shortTask()
+    {
+      keyPad.loop();
 
-      ButtonsEnum longEvt = _keyPad.event(LongKeyDown);
-      ButtonsEnum shortEvt = _keyPad.event(ShortKeyUp);
+      ButtonsEnum longEvt = keyPad.event(LongKeyDown);
+      ButtonsEnum shortEvt = keyPad.event(ShortKeyUp);
 
       if (shortEvt != NoButton || longEvt != NoButton)
       {
@@ -297,20 +405,25 @@ class Program
         Serial.println(shortEvt);
       }
 
-      switch (_state)
+      if ((longEvt & SetButton) != 0)
       {
-        case prg::Idle:
-          if ((longEvt & SetButton) != 0)
-          {
-            _state = prg::EditConsign;
-          }
-          break;
-        case prg::EditConsign:
-          if (!UpdateConsignStateMachine::run(_consign, shortEvt, longEvt, _mainScreen))
-          {
-            _state = prg::Idle;
-          }
-          break;
+        screenFsm.trigger(CANCEL_EVENT);
+      }
+      else if ((shortEvt & SetButton) != 0)
+      {
+        screenFsm.trigger(SELECT_EVENT);
+      }
+      else if ((shortEvt & UpButton) != 0)
+      {
+        screenFsm.trigger(UP_EVENT);
+      }
+      else if ((shortEvt & DownButton) != 0)
+      {
+        screenFsm.trigger(DOWN_EVENT);
+      }
+      else if ((shortEvt & RightButton) != 0)
+      {
+        screenFsm.trigger(BACK_EVENT);
       }
     }
 
@@ -336,7 +449,7 @@ class Program
     double _output;
     TFT _tft;
     Screen _mainScreen;
-    KeyPad _keyPad;
+
     PID _pid;
     prg::StateEnum _state;
 };
@@ -345,30 +458,5 @@ void shortCallback();
 void longCallback();
 
 Program prog;
-Scheduler sched;
-Task shortTask(5, TASK_FOREVER, &shortCallback);
-Task longTask(500, TASK_FOREVER, &longCallback);
 
-void shortCallback()
-{
-  prog.shortTask();
-}
-
-void longCallback()
-{
-  prog.longTask();
-}
-
-void setup() {
-  prog.setup();
-  sched.init();
-  sched.addTask(shortTask);
-  sched.addTask(longTask);
-  shortTask.enable();
-  longTask.enable();
-}
-
-void loop()
-{
-  sched.execute();
-}
+*/
