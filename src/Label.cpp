@@ -1,8 +1,8 @@
 #include "Label.h"
 
 Label::Label(byte size, byte decimals, const Point &pt, const Color &foreColor)
-  : _position(pt), 
-    _foreColor(foreColor), 
+  : _position(pt),
+    _foreColor(foreColor),
     _fontSize(Size_5x8),
     _size(size),
     _decimals(decimals)
@@ -22,8 +22,8 @@ void spacing(String &left, int i, int s, char c)
     {
       left.concat(c);
     }
-
-    s--; 
+    
+    s--;
   }
 }
 
@@ -89,10 +89,10 @@ void Label::draw(TFT &hw)
   {
     return;
   }
-  
+
   char valueBuf[_size + 1];
   _value.toCharArray(valueBuf, _size + 1);
-  
+
   hw.noStroke();
   hw.fill(_backColor.r, _backColor.g, _backColor.b);
   hw.rect(_position.x, _position.y, _size * _fontSize * 6, _fontSize * 8);

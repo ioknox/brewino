@@ -1,5 +1,5 @@
-#include <SPI.h>
-#include <SparkFunMAX31855k.h>
+#include <Arduino.h>
+
 
 #include <SPI.h>
 #include <TFT.h>
@@ -343,7 +343,7 @@ class UpdateConsignStateMachine
           editConsign(consign, screen);
         }
 
-        
+
 
         if (shortEvt != NoButton || longEvt != NoButton)
         {
@@ -410,7 +410,7 @@ class Program
 
     void setup() {
       Serial.begin(57600);
-    
+
       _tft.begin();
       _tft.background(0, 0, 0);
 
@@ -517,4 +517,3 @@ void loop()
 {
   sched.execute();
 }
-
