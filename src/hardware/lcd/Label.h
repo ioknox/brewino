@@ -3,8 +3,8 @@
 
 #include <TFT.h>
 
-#include "Point.h"
-#include "Color.h"
+#include <util/Point.h>
+#include <util/Color.h>
 
 enum FontSize
 {
@@ -22,7 +22,7 @@ class Label
 {
   public:
     Label(byte size, byte decimals, const Point &pt, const Color &foreColor);
-    
+
     inline const String& value() { return _value; }
     inline const Point& position() { return _position; }
     inline const Color& foreColor() { return _foreColor; }
@@ -40,9 +40,9 @@ class Label
     void setBackColor(const Color& backColor);
     bool setRequireRefresh(bool refresh);
     void setFontSize(FontSize fontSize);
-    
+
     virtual void draw(TFT &hw);
-    
+
   private:
     Point _position;
     Color _foreColor;
@@ -54,4 +54,4 @@ class Label
     byte _decimals;
 };
 
-#endif __LABEL_H__
+#endif
