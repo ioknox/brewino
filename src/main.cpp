@@ -175,64 +175,64 @@ double ConsignManager::_originalConsign = 0.0;
 short ConsignManager::_editState = 0;
 short ConsignManager::_editInit = 0;
 
-class MainMenu
+struct MenuItem
 {
-public:
-  void exit()
-  {
+  State *state;
+  String text;
 
-  }
-
-  void begin()
+  void set(State *_state, const char *_text)
   {
-  }
-
-  void select()
-  {
-  }
-
-  void back()
-  {
+    state = _state;
+    text = String(_text);
   }
 };
 
-MainMenu mainMenuInstance;
-
-template <typename TClass>
-class Delegate
+struct Menu : State
 {
-public:
-  typedef void (*TCallback)();
-  typedef void (TClass::* TMember)();
-  Delegate(TMember callback, TClass *instance)
+  Menu(MenuItem[] items)
   {
-    _instance = instance;
-    _callback = callback;
+
   }
 
-  TCallback get()
+  static void exit()
   {
-    return (TCallback)this;
+
   }
 
-  void operator()()
+  static void begin()
   {
-    _callback(_instance);
+  }
+
+  static void select()
+  {
+  }
+
+  static void back()
+  {
+  }
+
+  static void down()
+  {
+  }
+
+  static void up()
+  {
   }
 
 private:
-  TClass *_instance;
-  TMember _callback;
+  MenuItem items[];
 };
-
-Delegate<MainMenu> mainMenuDelegate(&MainMenu::begin, &mainMenuInstance);
 
 State mainMenu(NULL, NULL);
 State editConsign(NULL, NULL);
 State editSettings(NULL, NULL);
 
+MenuItem items[2];
+items[0].set(&editConsign, "EDIT CONSIGN");
+items[1].set(&idle, "EXIT");
+
 void setup() {
-  screenFsm.add_transition(&idle, &mainMenu, SELECT_EVENT, mainMenuDelegate.get());
+  screenFsm.add_transition(&idle, &mainMenu, SELECT_EVENT, &MainMenu::begin);
   screenFsm.add_transition(&editConsign, &idle, SELECT_EVENT, &ConsignManager::commit);
   screenFsm.add_transition(&editConsign, &idle, CANCEL_EVENT, &ConsignManager::rollback);
   screenFsm.add_transition(&editConsign, &editConsign, UP_EVENT, &ConsignManager::up);
