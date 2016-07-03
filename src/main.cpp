@@ -26,8 +26,7 @@
 Servo myservo;
 int val;
 
-State idle(NULL, NULL);
-Fsm screenFsm(&idle);
+
 
 void shortCallback();
 void longCallback();
@@ -40,7 +39,8 @@ double input = 0.0;
 double output = 0.0;
 Settings settings;
 KeyPad keyPad;
-Screen mainScreen;
+MainScreen mainScreen;
+Screen *screen = &mainScreen;
 
 TFT tft(TFT_CS, TFT_DC, TFT_RESET);
 PID pid(
@@ -52,6 +52,14 @@ PID pid(
   settings.derivate,
   DIRECT
 );
+
+void enterIdle()
+{
+  screen = &mainScreen;
+}
+
+State idle(enterIdle, NULL);
+Fsm screenFsm(&idle);
 
 void shortCallback()
 {
@@ -101,7 +109,8 @@ void longCallback()
   mainScreen.setConsign(settings.consign);
   mainScreen.setTemp(input);
   mainScreen.setOutput(output);
-  mainScreen.draw(tft);
+
+  screen->draw(tft);
 }
 
 class ConsignManager
@@ -154,7 +163,7 @@ private:
   static short _editState;
   static short _editInit;
 
-  static void changeModifiedConsign(double &consign, Screen &screen)
+  static void changeModifiedConsign(double &consign, MainScreen &screen)
   {
     consign += (screen.editDigit() - _editInit) * pow(10.0, _editState - 1);
   }
@@ -164,7 +173,7 @@ private:
     _editState = (_editState + 1) % 4;
   }
 
-  static void editConsign(double &consign, Screen &screen)
+  static void editConsign(double &consign, MainScreen &screen)
   {
     _editInit = (short)(consign / pow(10.0, _editState - 1)) % 10;
     screen.editConsign(_editInit, _editState - 1);
@@ -175,64 +184,150 @@ double ConsignManager::_originalConsign = 0.0;
 short ConsignManager::_editState = 0;
 short ConsignManager::_editInit = 0;
 
-struct MenuItem
+struct MenuItem : State
 {
   State *state;
   String text;
 
-  void set(State *_state, const char *_text)
+  MenuItem(State *_state, const char *_text)
+    : State(NULL, NULL)
   {
     state = _state;
     text = String(_text);
   }
 };
 
-struct Menu : State
+template <typename TClass, void (TClass::*mf)(), TClass *ptr>
+struct Adaptor
 {
-  Menu(MenuItem[] items)
+  static void bind()
   {
+    (ptr->*mf)();
+  }
+};
 
+struct Menu : public Screen
+{
+  Menu(MenuItem *items, int count)
+  {
+    _items = items;
+    _count = count;
   }
 
-  static void exit()
+  template <typename TClass, TClass *ptr>
+  static void initialize(Fsm &stateMachine, State *parent)
   {
+    for (unsigned int i = 0; i < ptr->_count; i++)
+    {
+      unsigned int p = (i - 1) % ptr->_count;
+      unsigned int n = (i + 1) % ptr->_count;
 
+      MenuItem &current(ptr->_items[i]);
+      MenuItem &previous(ptr->_items[p]);
+      MenuItem &next(ptr->_items[n]);
+
+      if (i == 0)
+      {
+        stateMachine.add_transition(parent, &current, SELECT_EVENT, &Adaptor<Menu, &Menu::begin, ptr>::bind);
+      }
+
+      stateMachine.add_transition(&current, &previous, UP_EVENT, &Adaptor<Menu, &Menu::up, ptr>::bind);
+      stateMachine.add_transition(&current, current.state, SELECT_EVENT, &Adaptor<Menu, &Menu::end, ptr>::bind);
+      stateMachine.add_transition(&current, parent, BACK_EVENT, &Adaptor<Menu, &Menu::end, ptr>::bind);
+      stateMachine.add_transition(&current, &next, DOWN_EVENT, &Adaptor<Menu, &Menu::down, ptr>::bind);
+    }
   }
 
-  static void begin()
+
+  virtual void draw(TFT &hw)
   {
+    if (_requireRefresh)
+    {
+      _requireRefresh = false;
+
+      Color white(255, 255, 255);
+      Color black(0, 0, 0);
+      Point position(0, 0);
+
+      Label lbl(hw.width() / Size_20x32, 0, position, white);
+      for (int i = 0; i < _count && position.y < hw.height(); i++)
+      {
+        if (i == _current)
+        {
+          lbl.setForeColor(black);
+          lbl.setBackColor(white);
+        }
+        else
+        {
+          lbl.setForeColor(white);
+          lbl.setBackColor(black);
+        }
+        lbl.setValue(_items[i].text);
+        lbl.draw(hw);
+        position.y += Size_20x32 * 2;
+        lbl.setPosition(position);
+      }
+    }
   }
 
-  static void select()
+  void begin()
   {
+    _current = 0;
+    _requireRefresh = true;
+    screen = this;
   }
 
-  static void back()
+  void end()
   {
+    _current = 0;
   }
 
-  static void down()
+  void up()
   {
+    _current = (_current + 1) % _count;
+    _requireRefresh = true;
   }
 
-  static void up()
+  void down()
   {
+    _current = (_current - 1) % _count;
+    _requireRefresh = true;
   }
 
 private:
-  MenuItem items[];
+  bool _requireRefresh;
+  MenuItem* _items;
+  unsigned int _count;
+  unsigned int _current;
 };
 
-State mainMenu(NULL, NULL);
-State editConsign(NULL, NULL);
-State editSettings(NULL, NULL);
+State editConsign(enterIdle, NULL);
 
-MenuItem items[2];
-items[0].set(&editConsign, "EDIT CONSIGN");
-items[1].set(&idle, "EXIT");
+
+MenuItem settingMenuItems[] =
+{
+  MenuItem(&idle, "Kp"),
+  MenuItem(&idle, "Ki"),
+  MenuItem(&idle, "Kd"),
+  MenuItem(&idle, "Automatic mode"),
+  MenuItem(&idle, "Output type"),
+  MenuItem(&idle, "Bla bla"),
+};
+Menu settingMenu(settingMenuItems, 6);
+
+MenuItem mainMenuItems[] =
+{
+  MenuItem(&editConsign, "Edit consign"),
+  MenuItem(&editSettings, "Edit settings"),
+};
+Menu mainMenu(mainMenuItems, 2);
+
 
 void setup() {
-  screenFsm.add_transition(&idle, &mainMenu, SELECT_EVENT, &MainMenu::begin);
+
+  Menu::initialize<Menu, &mainMenu>(screenFsm, &idle);
+  Menu::initialize<Menu, &settingMenu>(screenFsm, &editSettings);
+
   screenFsm.add_transition(&editConsign, &idle, SELECT_EVENT, &ConsignManager::commit);
   screenFsm.add_transition(&editConsign, &idle, CANCEL_EVENT, &ConsignManager::rollback);
   screenFsm.add_transition(&editConsign, &editConsign, UP_EVENT, &ConsignManager::up);
@@ -266,197 +361,3 @@ void loop()
 {
   sched.execute();
 }
-
-/*
-class UpdateConsignStateMachine
-{
-  public:
-    static bool run(double &consign, ButtonsEnum shortEvt, ButtonsEnum longEvt, Screen &screen)
-    {
-      if (!_running)
-      {
-        _running = true;
-        _editState = 0;
-        _originalConsign = consign;
-        editConsign(consign, screen);
-      }
-      else
-      {
-        if ((longEvt & SetButton) != 0)
-        {
-          consign = _originalConsign;
-          _running = false;
-        }
-        else if ((shortEvt & SetButton) != 0)
-        {
-          changeModifiedConsign(consign, screen);
-          _running = false;
-        }
-        else if ((shortEvt & UpButton) != 0)
-        {
-          screen.incEditDigit();
-        }
-        else if ((shortEvt & DownButton) != 0)
-        {
-          screen.decEditDigit();
-        }
-        else if ((shortEvt & RightButton) != 0)
-        {
-          changeModifiedConsign(consign, screen);
-          nextDigit();
-          editConsign(consign, screen);
-        }
-
-
-
-        if (shortEvt != NoButton || longEvt != NoButton)
-        {
-          Serial.print("consign:");
-          Serial.print(consign);
-          Serial.print(" state:");
-          Serial.println(_editState);
-          Serial.print(" init:");
-          Serial.println(_editInit);
-        }
-      }
-
-      if (!_running)
-      {
-        screen.disableEdit();
-      }
-
-      return _running;
-    }
-
-  private:
-    static double _originalConsign;
-    static bool _running;
-    static short _editState;
-    static short _editInit;
-
-    static void changeModifiedConsign(double &consign, Screen &screen)
-    {
-      consign += (screen.editDigit() - _editInit) * pow(10.0, _editState - 1);
-    }
-
-    static void nextDigit()
-    {
-      _editState = (_editState + 1) % 4;
-    }
-
-    static void editConsign(double &consign, Screen &screen)
-    {
-      _editInit = (short)(consign / pow(10.0, _editState - 1)) % 10;
-      screen.editConsign(_editInit, _editState - 1);
-    }
-};
-
-double UpdateConsignStateMachine::_originalConsign = 0.0;
-bool UpdateConsignStateMachine::_running = false;
-short UpdateConsignStateMachine::_editState = 0;
-short UpdateConsignStateMachine::_editInit = 0;
-*/
-/*
-class Program
-{
-  public:
-
-    Program()
-      : _p(2), _i(5), _d(1),
-        _input(0), _output(0), _consign(0),
-        _tft(TFT_CS, TFT_DC, TFT_RESET),
-        _pid(&_input, &_output, &_consign, _p, _i, _d, DIRECT)
-    {
-      // Nothing to do...
-    }
-
-    void setup() {
-      Serial.begin(57600);
-
-      _tft.begin();
-      _tft.background(0, 0, 0);
-
-      analogReference(EXTERNAL);
-
-      _pid.SetOutputLimits(0.0, 2000.0);
-      _pid.SetMode(AUTOMATIC);
-
-      _input = 0.0;
-      _output = 0.0;
-      _consign = 32.0;
-
-      myservo.attach(3);
-
-      _state = prg::Idle;
-    }
-
-    static void shortTask()
-    {
-      keyPad.loop();
-
-      ButtonsEnum longEvt = keyPad.event(LongKeyDown);
-      ButtonsEnum shortEvt = keyPad.event(ShortKeyUp);
-
-      if (shortEvt != NoButton || longEvt != NoButton)
-      {
-        Serial.print("LONG:");
-        Serial.print(longEvt);
-        Serial.print(" SHORT:");
-        Serial.println(shortEvt);
-      }
-
-      if ((longEvt & SetButton) != 0)
-      {
-        screenFsm.trigger(CANCEL_EVENT);
-      }
-      else if ((shortEvt & SetButton) != 0)
-      {
-        screenFsm.trigger(SELECT_EVENT);
-      }
-      else if ((shortEvt & UpButton) != 0)
-      {
-        screenFsm.trigger(UP_EVENT);
-      }
-      else if ((shortEvt & DownButton) != 0)
-      {
-        screenFsm.trigger(DOWN_EVENT);
-      }
-      else if ((shortEvt & RightButton) != 0)
-      {
-        screenFsm.trigger(BACK_EVENT);
-      }
-    }
-
-    void longTask() {
-      float voltage = (analogRead(A3) * 3.3f) / 1024.0f;
-      _input = (voltage - 0.5f) * 100.0f;
-      _pid.Compute();
-
-      myservo.write(map(_output, 0, 2000, 0, 100));
-
-      _mainScreen.setConsign(_consign);
-      _mainScreen.setTemp(_input);
-      _mainScreen.setOutput(_output);
-      _mainScreen.draw(_tft);
-    }
-
-  private:
-    double _p;
-    double _i;
-    double _d;
-    double _input;
-    double _consign;
-    double _output;
-    TFT _tft;
-    Screen _mainScreen;
-
-    PID _pid;
-    prg::StateEnum _state;
-};
-
-void shortCallback();
-void longCallback();
-
-Program prog;
-
-*/

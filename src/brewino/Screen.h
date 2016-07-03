@@ -6,8 +6,14 @@
 
 class Screen
 {
+public:
+  virtual void draw(TFT &hw) = 0;
+};
+
+class MainScreen : public Screen
+{
   public:
-    Screen()
+    MainScreen()
       : _consignLabel(5, 1, Point(0, 32), Color(0, 255, 0)),
         _editLabel(1, 0, Point(0, 32), Color(255, 255, 255)),
         _currentTempLabel(5, 1, Point(0, 0), Color(255, 0, 0)),

@@ -3,7 +3,14 @@
 
 struct Settings
 {
-public:
+  Settings()
+  {
+    proportional = 2;
+    integral = 5;
+    derivate = 1;
+    automatic = true;
+  }
+
   double proportional;
   double integral;
   double derivate;
