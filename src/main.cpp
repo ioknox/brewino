@@ -173,12 +173,9 @@ private:
 
   static void changeModifiedConsign(double &consign, MainScreen &screen)
   {
-    Serial.print("old:");
-    Serial.print(consign);
-    Serial.print("new:");
-    consign += (screen.editDigit() - _editInit) * pow(10.0, _editState - 1);
-    Serial.print(consign);
-    Serial.println();
+    double value = (screen.editDigit() - _editInit) * 10.0;
+    value = round(value * pow(10.0, _editState - 1));
+    consign += (value / 10.0);
   }
 
   static void nextDigit()
@@ -189,7 +186,9 @@ private:
   static void editConsign(double &consign, MainScreen &screen)
   {
     long value = (long)round(consign * 10.0 / pow(10.0, _editState - 1.0));
-    _editInit = (short)(value % 100L);
+    value = (value / 10L) % 10L;
+    _editInit = (short)(value);
+
     screen.editConsign(_editInit, _editState - 1);
   }
 };
