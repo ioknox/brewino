@@ -7,6 +7,8 @@
 #include <TaskScheduler.h>
 #include <Fsm.h>
 
+#include <math.h>
+
 #define SELECT_EVENT 1
 #define CANCEL_EVENT 2
 #define UP_EVENT 3
@@ -119,9 +121,15 @@ public:
   static void enter()
   {
     Serial.println(" *** ENTER EDIT CONSIGN *** ");
+    enterIdle();
     _originalConsign = settings.consign;
     _editState = 0;
     editConsign(settings.consign, mainScreen);
+  }
+
+  static void leave()
+  {
+      Serial.println(" *** LEAVE EDIT CONSIGN *** ");
   }
 
   static void commit()
@@ -165,7 +173,12 @@ private:
 
   static void changeModifiedConsign(double &consign, MainScreen &screen)
   {
+    Serial.print("old:");
+    Serial.print(consign);
+    Serial.print("new:");
     consign += (screen.editDigit() - _editInit) * pow(10.0, _editState - 1);
+    Serial.print(consign);
+    Serial.println();
   }
 
   static void nextDigit()
@@ -175,7 +188,8 @@ private:
 
   static void editConsign(double &consign, MainScreen &screen)
   {
-    _editInit = (short)(consign / pow(10.0, _editState - 1)) % 10;
+    long value = (long)round(consign * 10.0 / pow(10.0, _editState - 1.0));
+    _editInit = (short)(value % 100L);
     screen.editConsign(_editInit, _editState - 1);
   }
 };
@@ -184,16 +198,24 @@ double ConsignManager::_originalConsign = 0.0;
 short ConsignManager::_editState = 0;
 short ConsignManager::_editInit = 0;
 
-struct MenuItem : State
+struct MenuItem : public State
 {
   State *state;
   String text;
 
   MenuItem(State *_state, const char *_text)
-    : State(NULL, NULL)
+    : State(MenuItem::enter, MenuItem::leave)
   {
     state = _state;
     text = String(_text);
+  }
+
+  static void enter()
+  {
+  }
+
+  static void leave()
+  {
   }
 };
 
@@ -228,16 +250,20 @@ struct Menu : public Screen
 
       if (i == 0)
       {
-        stateMachine.add_transition(parent, &current, SELECT_EVENT, &Adaptor<Menu, &Menu::begin, ptr>::bind);
+        stateMachine.add_transition(parent, &current, SELECT_EVENT,
+          &Adaptor<Menu, &Menu::begin, ptr>::bind);
       }
 
-      stateMachine.add_transition(&current, &previous, UP_EVENT, &Adaptor<Menu, &Menu::up, ptr>::bind);
-      stateMachine.add_transition(&current, current.state, SELECT_EVENT, &Adaptor<Menu, &Menu::end, ptr>::bind);
+      stateMachine.add_transition(&current, &previous, UP_EVENT,
+        &Adaptor<Menu, &Menu::up, ptr>::bind);
+      if (current.state != nullptr)
+      {
+        stateMachine.add_transition(&current, current.state, SELECT_EVENT, &Adaptor<Menu, &Menu::end, ptr>::bind);
+      }
       stateMachine.add_transition(&current, parent, BACK_EVENT, &Adaptor<Menu, &Menu::end, ptr>::bind);
       stateMachine.add_transition(&current, &next, DOWN_EVENT, &Adaptor<Menu, &Menu::down, ptr>::bind);
     }
   }
-
 
   virtual void draw(TFT &hw)
   {
@@ -284,13 +310,20 @@ struct Menu : public Screen
 
   void up()
   {
-    _current = (_current + 1) % _count;
+    if (_current == 0)
+    {
+      _current = (_count - 1);
+    }
+    else
+    {
+      _current -= 1;
+    }
     _requireRefresh = true;
   }
 
   void down()
   {
-    _current = (_current - 1) % _count;
+    _current = (_current + 1) % _count;
     _requireRefresh = true;
   }
 
@@ -301,40 +334,49 @@ private:
   unsigned int _current;
 };
 
-State editConsign(enterIdle, NULL);
-
+State onEditConsign(ConsignManager::enter, ConsignManager::leave);
+State onModifiyConsign(NULL, NULL);
+State editSettings(NULL, NULL);
 
 MenuItem settingMenuItems[] =
 {
-  MenuItem(&idle, "Kp"),
-  MenuItem(&idle, "Ki"),
-  MenuItem(&idle, "Kd"),
-  MenuItem(&idle, "Automatic mode"),
-  MenuItem(&idle, "Output type"),
-  MenuItem(&idle, "Bla bla"),
+  MenuItem(NULL, "Kp"),
+  MenuItem(NULL, "Ki"),
+  MenuItem(NULL, "Kd"),
+  MenuItem(NULL, "Automatic mode"),
+  MenuItem(NULL, "Output type"),
+  MenuItem(NULL, "Bla bla"),
 };
 Menu settingMenu(settingMenuItems, 6);
 
 MenuItem mainMenuItems[] =
 {
-  MenuItem(&editConsign, "Edit consign"),
-  MenuItem(&editSettings, "Edit settings"),
+  MenuItem(&onEditConsign, "Edit consign"),
+  MenuItem(NULL, "Edit settings"),
 };
 Menu mainMenu(mainMenuItems, 2);
 
-
-void setup() {
+/**
+ *
+ */
+void setup()
+{
+  Serial.begin(57600);
 
   Menu::initialize<Menu, &mainMenu>(screenFsm, &idle);
-  Menu::initialize<Menu, &settingMenu>(screenFsm, &editSettings);
+  Menu::initialize<Menu, &settingMenu>(screenFsm, &mainMenuItems[1]);
 
-  screenFsm.add_transition(&editConsign, &idle, SELECT_EVENT, &ConsignManager::commit);
-  screenFsm.add_transition(&editConsign, &idle, CANCEL_EVENT, &ConsignManager::rollback);
-  screenFsm.add_transition(&editConsign, &editConsign, UP_EVENT, &ConsignManager::up);
-  screenFsm.add_transition(&editConsign, &editConsign, DOWN_EVENT, &ConsignManager::down);
-  screenFsm.add_transition(&editConsign, &editConsign, BACK_EVENT, &ConsignManager::next);
+  screenFsm.add_transition(&onEditConsign, &idle, SELECT_EVENT, &ConsignManager::commit);
+  screenFsm.add_transition(&onEditConsign, &idle, CANCEL_EVENT, &ConsignManager::rollback);
+  screenFsm.add_transition(&onEditConsign, &onModifiyConsign, UP_EVENT, &ConsignManager::up);
+  screenFsm.add_transition(&onEditConsign, &onModifiyConsign, DOWN_EVENT, &ConsignManager::down);
+  screenFsm.add_transition(&onEditConsign, &onModifiyConsign, BACK_EVENT, &ConsignManager::next);
 
-  Serial.begin(57600);
+  screenFsm.add_transition(&onModifiyConsign, &idle, SELECT_EVENT, &ConsignManager::commit);
+  screenFsm.add_transition(&onModifiyConsign, &idle, CANCEL_EVENT, &ConsignManager::rollback);
+  screenFsm.add_transition(&onModifiyConsign, &onModifiyConsign, UP_EVENT, &ConsignManager::up);
+  screenFsm.add_transition(&onModifiyConsign, &onModifiyConsign, DOWN_EVENT, &ConsignManager::down);
+  screenFsm.add_transition(&onModifiyConsign, &onModifiyConsign, BACK_EVENT, &ConsignManager::next);
 
   tft.begin();
   tft.background(0, 0, 0);
