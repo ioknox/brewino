@@ -21,17 +21,19 @@
 
 #define TC_CS     10
 
+#include <util/Adaptor.h>
+
+#include <brewino/Menu.h>
 #include <brewino/Screen.h>
 #include <brewino/KeyPad.h>
 #include <brewino/Settings.h>
 
-Servo myservo;
-int val;
-
-
-
+void enterIdle();
 void shortCallback();
 void longCallback();
+
+Servo myservo;
+int val;
 
 Scheduler sched;
 Task shortTask(5, TASK_FOREVER, &shortCallback);
@@ -42,7 +44,6 @@ double output = 0.0;
 Settings settings;
 KeyPad keyPad;
 MainScreen mainScreen;
-Screen *screen = &mainScreen;
 
 TFT tft(TFT_CS, TFT_DC, TFT_RESET);
 PID pid(
@@ -55,13 +56,13 @@ PID pid(
   DIRECT
 );
 
-void enterIdle()
-{
-  screen = &mainScreen;
-}
-
 State idle(enterIdle, NULL);
 Fsm screenFsm(&idle);
+
+void enterIdle()
+{
+  mainScreen.enable();
+}
 
 void shortCallback()
 {
@@ -112,7 +113,7 @@ void longCallback()
   mainScreen.setTemp(input);
   mainScreen.setOutput(output);
 
-  screen->draw(tft);
+  Screen::current()->draw(tft);
 }
 
 class ConsignManager
@@ -193,153 +194,56 @@ private:
   }
 };
 
+class EditScreen : public Screen, public State
+{
+  public:
+    EditScreen()
+      : State(NULL, NULL)
+    {
+
+    }
+
+    void up()
+    {
+      Serial.println("EDIT SCREEN UP BUTTON PRESSED. GO SLEEP");
+    }
+
+    void down()
+    {
+      Serial.println("REALLY DUDE...");
+    }
+
+
+
+    template<EditScreen *self, void (EditScreen::*mf)()>
+    static void initialize(Fsm &fsm, int event)
+    {
+      fsm.add_transition(self, self, event, Adaptor<EditScreen, mf, self>::bind);
+    }
+
+    template<EditScreen *self>
+    static void initialize(Fsm &fsm)
+    {
+      initialize<self, &EditScreen::up>(fsm, UP_EVENT);
+      initialize<self, &EditScreen::down>(fsm, DOWN_EVENT);
+    }
+
+
+};
+
 double ConsignManager::_originalConsign = 0.0;
 short ConsignManager::_editState = 0;
 short ConsignManager::_editInit = 0;
-
-struct MenuItem : public State
-{
-  State *state;
-  String text;
-
-  MenuItem(State *_state, const char *_text)
-    : State(MenuItem::enter, MenuItem::leave)
-  {
-    state = _state;
-    text = String(_text);
-  }
-
-  static void enter()
-  {
-  }
-
-  static void leave()
-  {
-  }
-};
-
-template <typename TClass, void (TClass::*mf)(), TClass *ptr>
-struct Adaptor
-{
-  static void bind()
-  {
-    (ptr->*mf)();
-  }
-};
-
-struct Menu : public Screen
-{
-  Menu(MenuItem *items, int count)
-  {
-    _items = items;
-    _count = count;
-  }
-
-  template <typename TClass, TClass *ptr>
-  static void initialize(Fsm &stateMachine, State *parent)
-  {
-    for (unsigned int i = 0; i < ptr->_count; i++)
-    {
-      unsigned int p = (i - 1) % ptr->_count;
-      unsigned int n = (i + 1) % ptr->_count;
-
-      MenuItem &current(ptr->_items[i]);
-      MenuItem &previous(ptr->_items[p]);
-      MenuItem &next(ptr->_items[n]);
-
-      if (i == 0)
-      {
-        stateMachine.add_transition(parent, &current, SELECT_EVENT,
-          &Adaptor<Menu, &Menu::begin, ptr>::bind);
-      }
-
-      stateMachine.add_transition(&current, &previous, UP_EVENT,
-        &Adaptor<Menu, &Menu::up, ptr>::bind);
-      if (current.state != nullptr)
-      {
-        stateMachine.add_transition(&current, current.state, SELECT_EVENT, &Adaptor<Menu, &Menu::end, ptr>::bind);
-      }
-      stateMachine.add_transition(&current, parent, BACK_EVENT, &Adaptor<Menu, &Menu::end, ptr>::bind);
-      stateMachine.add_transition(&current, &next, DOWN_EVENT, &Adaptor<Menu, &Menu::down, ptr>::bind);
-    }
-  }
-
-  virtual void draw(TFT &hw)
-  {
-    if (_requireRefresh)
-    {
-      _requireRefresh = false;
-
-      Color white(255, 255, 255);
-      Color black(0, 0, 0);
-      Point position(0, 0);
-
-      Label lbl(hw.width() / Size_20x32, 0, position, white);
-      for (int i = 0; i < _count && position.y < hw.height(); i++)
-      {
-        if (i == _current)
-        {
-          lbl.setForeColor(black);
-          lbl.setBackColor(white);
-        }
-        else
-        {
-          lbl.setForeColor(white);
-          lbl.setBackColor(black);
-        }
-        lbl.setValue(_items[i].text);
-        lbl.draw(hw);
-        position.y += Size_20x32 * 2;
-        lbl.setPosition(position);
-      }
-    }
-  }
-
-  void begin()
-  {
-    _current = 0;
-    _requireRefresh = true;
-    screen = this;
-  }
-
-  void end()
-  {
-    _current = 0;
-  }
-
-  void up()
-  {
-    if (_current == 0)
-    {
-      _current = (_count - 1);
-    }
-    else
-    {
-      _current -= 1;
-    }
-    _requireRefresh = true;
-  }
-
-  void down()
-  {
-    _current = (_current + 1) % _count;
-    _requireRefresh = true;
-  }
-
-private:
-  bool _requireRefresh;
-  MenuItem* _items;
-  unsigned int _count;
-  unsigned int _current;
-};
 
 State onEditConsign(ConsignManager::enter, ConsignManager::leave);
 State onModifiyConsign(NULL, NULL);
 State editSettings(NULL, NULL);
 
+EditScreen editKp;
+
 MenuItem settingMenuItems[] =
 {
-  MenuItem(NULL, "Kp"),
+  MenuItem(&editKp, "Kp"),
   MenuItem(NULL, "Ki"),
   MenuItem(NULL, "Kd"),
   MenuItem(NULL, "Automatic mode"),
@@ -365,6 +269,8 @@ void setup()
   Menu::initialize<Menu, &mainMenu>(screenFsm, &idle);
   Menu::initialize<Menu, &settingMenu>(screenFsm, &mainMenuItems[1]);
 
+  EditScreen::initialize<&editKp>(screenFsm);
+
   screenFsm.add_transition(&onEditConsign, &idle, SELECT_EVENT, &ConsignManager::commit);
   screenFsm.add_transition(&onEditConsign, &idle, CANCEL_EVENT, &ConsignManager::rollback);
   screenFsm.add_transition(&onEditConsign, &onModifiyConsign, UP_EVENT, &ConsignManager::up);
@@ -378,7 +284,8 @@ void setup()
   screenFsm.add_transition(&onModifiyConsign, &onModifiyConsign, BACK_EVENT, &ConsignManager::next);
 
   tft.begin();
-  tft.background(0, 0, 0);
+
+  mainScreen.enable();
 
   analogReference(EXTERNAL);
 

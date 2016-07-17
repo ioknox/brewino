@@ -7,8 +7,28 @@
 class Screen
 {
 public:
-  virtual void draw(TFT &hw) = 0;
+  virtual void draw(TFT &hw)
+  {
+    if (_changed)
+    {
+      hw.background(0, 0, 0);
+      _changed = false;
+    }
+  }
+  void enable()
+  {
+    _current = this;
+    _changed = true;
+  }
+  inline bool changed() { return _changed; }
+  inline static Screen *current() { return _current; }
+
+private:
+  static Screen *_current;
+  bool _changed;
 };
+
+Screen *Screen::_current = NULL;
 
 class MainScreen : public Screen
 {
@@ -35,6 +55,15 @@ class MainScreen : public Screen
 
     virtual void draw(TFT &hw)
     {
+      if (changed())
+      {
+        _consignLabel.setRequireRefresh(true);
+        _currentTempLabel.setRequireRefresh(true);
+        _outputLabel.setRequireRefresh(true);
+      }
+
+      Screen::draw(hw);
+
       if (_editDigit >= 0) {
         if (_consignLabel.requireRefresh() && _editDigit >= 0)
         {
