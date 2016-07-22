@@ -108,7 +108,7 @@ void longCallback()
 
   Screen::current()->draw(tft);
 }
-
+/*
 struct ConsignManager : public State
 {
 public:
@@ -125,7 +125,7 @@ public:
       mainScreen.enable();
       _originalConsign = settings.consign;
       _editState = 0;
-      editConsign(settings.consign, mainScreen);
+      editValue(settings.consign, mainScreen);
     }
   }
 
@@ -133,72 +133,11 @@ public:
   {
   }
 
-  void commit()
-  {
-    changeModifiedConsign(settings.consign, mainScreen);
-    mainScreen.disableEdit();
-  }
 
-  void rollback()
-  {
-    settings.consign = _originalConsign;
-    mainScreen.disableEdit();
-  }
-
-  void up()
-  {
-    mainScreen.incEditDigit();
-  }
-
-  void down()
-  {
-    mainScreen.decEditDigit();
-  }
-
-  void next()
-  {
-    changeModifiedConsign(settings.consign, mainScreen);
-    nextDigit();
-    editConsign(settings.consign, mainScreen);
-  }
 
   void setup(Fsm &stateMachine, State *parent)
   {
-    _upEvent.state_from = this;
-    _upEvent.state_to = this;
-    _upEvent.instance = this;
-    _upEvent.method = &ConsignManager::up;
-    _upEvent.event = UP_EVENT;
 
-    _downEvent.state_from = this;
-    _downEvent.state_to = this;
-    _downEvent.instance = this;
-    _downEvent.method = &ConsignManager::down;
-    _downEvent.event = DOWN_EVENT;
-
-    _nextEvent.state_from = this;
-    _nextEvent.state_to = this;
-    _nextEvent.instance = this;
-    _nextEvent.method = &ConsignManager::next;
-    _nextEvent.event = BACK_EVENT;
-
-    _commitEvent.state_from = this;
-    _commitEvent.state_to = parent;
-    _commitEvent.instance = this;
-    _commitEvent.method = &ConsignManager::commit;
-    _commitEvent.event = SELECT_EVENT;
-
-    _rollbackEvent.state_from = this;
-    _rollbackEvent.state_to = parent;
-    _rollbackEvent.instance = this;
-    _rollbackEvent.method = &ConsignManager::rollback;
-    _rollbackEvent.event = CANCEL_EVENT;
-
-    stateMachine.add_transition(&_upEvent);
-    stateMachine.add_transition(&_downEvent);
-    stateMachine.add_transition(&_nextEvent);
-    stateMachine.add_transition(&_commitEvent);
-    stateMachine.add_transition(&_rollbackEvent);
   }
 
 private:
@@ -207,38 +146,28 @@ private:
   TTransition<ConsignManager> _nextEvent;
   TTransition<ConsignManager> _commitEvent;
   TTransition<ConsignManager> _rollbackEvent;
-  double _originalConsign;
-  short _editState;
-  short _editInit;
-
-  void changeModifiedConsign(double &consign, MainScreen &screen)
-  {
-    double value = (screen.editDigit() - _editInit) * 10.0;
-    value = round(value * pow(10.0, _editState - 1));
-    consign += (value / 10.0);
-  }
-
-  void nextDigit()
-  {
-    _editState = (_editState + 1) % 4;
-  }
-
-  void editConsign(double &consign, MainScreen &screen)
-  {
-    long value = (long)round(consign * 10.0 / pow(10.0, _editState - 1.0));
-    value = (value / 10L) % 10L;
-    _editInit = (short)(value);
-
-    screen.editConsign(_editInit, _editState - 1);
-  }
-};
+};*/
 
 class EditScreen : public Screen, public State
 {
   public:
+    EditScreen()
+      : _displayLabel(5, 1, Point(0, 32), Color(0, 255, 0)),
+        _editLabel(1, 0, Point(0, 32), Color(255, 255, 255))
+    {
+        _displayLabel.setValue("?");
+        _displayLabel.setFontSize(Size_20x32);
+
+        _editLabel.setValue("?");
+        _editLabel.setFontSize(Size_20x32);
+    }
+
     virtual void on_enter()
     {
       enable();
+      _originalConsign = settings.consign;
+      _editState = 0;
+      editValue(settings.consign);
     }
 
     virtual void on_exit()
@@ -248,29 +177,157 @@ class EditScreen : public Screen, public State
 
     virtual void draw(TFT& hw)
     {
+        Screen::draw(hw);
 
+        _displayLabel.draw(hw);
+        _editLabel.draw(hw);
+    }
+
+    void commit()
+    {
+      changeModifiedValue(settings.consign);
+      disableEdit();
+    }
+
+    void rollback()
+    {
+      settings.consign = _originalConsign;
+      disableEdit();
     }
 
     void up()
     {
-      Serial.println("EDIT SCREEN UP BUTTON PRESSED. GO SLEEP");
+      _editDigit = (_editDigit + 1) % 10;
+      _editLabel.setValue(_editDigit);
     }
 
     void down()
     {
-      Serial.println("REALLY DUDE...");
+      _editDigit--;
+      if (_editDigit < 0)
+      {
+        _editDigit = 10 + _editDigit;
+      }
+      _editLabel.setValue(_editDigit);
     }
 
-    void setup()
+    void next()
     {
+      changeModifiedValue(settings.consign);
 
+      _editState = (_editState + 1) % 4;
+
+      editValue(settings.consign);
+    }
+
+    void setup(Fsm &stateMachine, State *parent)
+    {
+      _upEvent.state_from = this;
+      _upEvent.state_to = this;
+      _upEvent.instance = this;
+      _upEvent.method = &EditScreen::up;
+      _upEvent.event = UP_EVENT;
+
+      _downEvent.state_from = this;
+      _downEvent.state_to = this;
+      _downEvent.instance = this;
+      _downEvent.method = &EditScreen::down;
+      _downEvent.event = DOWN_EVENT;
+
+      _nextEvent.state_from = this;
+      _nextEvent.state_to = this;
+      _nextEvent.instance = this;
+      _nextEvent.method = &EditScreen::next;
+      _nextEvent.event = BACK_EVENT;
+
+      _commitEvent.state_from = this;
+      _commitEvent.state_to = parent;
+      _commitEvent.instance = this;
+      _commitEvent.method = &EditScreen::commit;
+      _commitEvent.event = SELECT_EVENT;
+
+      _rollbackEvent.state_from = this;
+      _rollbackEvent.state_to = parent;
+      _rollbackEvent.instance = this;
+      _rollbackEvent.method = &EditScreen::rollback;
+      _rollbackEvent.event = CANCEL_EVENT;
+
+      stateMachine.add_transition(&_upEvent);
+      stateMachine.add_transition(&_downEvent);
+      stateMachine.add_transition(&_nextEvent);
+      stateMachine.add_transition(&_commitEvent);
+      stateMachine.add_transition(&_rollbackEvent);
     }
 
   private:
-    //TTransition<EditScreen>
+
+    Label _displayLabel;
+    Label _editLabel;
+    TTransition<EditScreen> _upEvent;
+    TTransition<EditScreen> _downEvent;
+    TTransition<EditScreen> _nextEvent;
+    TTransition<EditScreen> _commitEvent;
+    TTransition<EditScreen> _rollbackEvent;
+    double _originalConsign;
+    short _editState;
+    short _editInit;
+    short _editDigit;
+
+    void disableEdit()
+    {
+      _editDigit = -1;
+      _editLabel.setValue(_editDigit);
+      _displayLabel.setRequireRefresh(true);
+    }
+
+    void changeModifiedValue(double &consign)
+    {
+      double value = (_editDigit - _editInit) * 10.0;
+      value = round(value * pow(10.0, _editState - 1));
+      consign += (value / 10.0);
+    }
+
+    void editValue(double &consign)
+    {
+      _displayLabel.setValue((float)consign);
+
+      long value = (long)round(consign * 10.0 / pow(10.0, _editState - 1.0));
+      value = (value / 10L) % 10L;
+      _editInit = (short)(value);
+
+      short editPower = _editState - 1;
+
+      _editDigit = _editInit;
+      _editLabel.setValue(_editDigit);
+      Point pt(_displayLabel.position());
+
+      short decimals = _displayLabel.decimals();
+      short pos = _displayLabel.size() - 1;
+
+      if (editPower >= 0)
+      {
+        if (decimals > 0)
+        {
+          pos -= (decimals + 1);
+        }
+      }
+
+      if (editPower < 0)
+      {
+        pos -= (decimals + editPower);
+      }
+      else
+      {
+        pos -= editPower;
+      }
+
+      pt.x = _editLabel.fontSize() * 6 * pos;
+      _displayLabel.setRequireRefresh(true);
+      _editLabel.setPosition(pt);
+    }
 };
 
-ConsignManager editConsignState;
+EditScreen editConsignState;
 EditScreen editKp;
 
 Menu mainMenu;
@@ -305,6 +362,8 @@ void setup()
   settingMenu.setup(screenFsm, &mainMenu, settingMenuItems, 6);
 
   editConsignState.setup(screenFsm, &idle);
+
+  editKp.setup(screenFsm, &idle);
 
   tft.begin();
 
