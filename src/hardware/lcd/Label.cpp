@@ -22,7 +22,7 @@ void spacing(String &left, int i, int s, char c)
     {
       left.concat(c);
     }
-    
+
     s--;
   }
 }
@@ -68,7 +68,7 @@ void Label::setBackColor(const Color& backColor)
   _requireRefresh = true;
 }
 
-bool Label::setRequireRefresh(bool refresh)
+void Label::setRequireRefresh(bool refresh)
 {
   _requireRefresh = refresh;
   _requireRefresh = true;

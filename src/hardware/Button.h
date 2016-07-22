@@ -94,7 +94,6 @@ class Button
     unsigned long _highSince;
     unsigned long _lowSince;
     unsigned long _lastChanged;
-
 };
 
 #endif

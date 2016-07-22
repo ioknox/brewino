@@ -1,47 +1,83 @@
 #ifndef __MENU_H__
 #define __MENU_H__
 
-#include "Screen.h"
+#include <brewino/Screen.h>
+
 #include "MenuItem.h"
 
-struct Menu : public Screen
+class Menu : public Screen, public State
 {
-  Menu(MenuItem *items, int count)
+public:
+  void setup(Fsm &stateMachine, State *parent, MenuItem *items, int count)
   {
-    _items = items;
     _count = count;
+    _items = items;
+
+    _upEvent.state_from = this;
+    _upEvent.state_to = this;
+    _upEvent.instance = this;
+    _upEvent.method = &Menu::up;
+    _upEvent.event = UP_EVENT;
+
+    _downEvent.state_from = this;
+    _downEvent.state_to = this;
+    _downEvent.instance = this;
+    _downEvent.method = &Menu::down;
+    _downEvent.event = DOWN_EVENT;
+
+    _backEvent.state_from = this;
+    _backEvent.state_to = parent;
+    _backEvent.instance = NULL;
+    _backEvent.event = BACK_EVENT;
+
+    _selectEvent.state_from = this;
+    _selectEvent.state_to = _items[0].state_to;
+    _selectEvent.instance = NULL;
+    _selectEvent.event = SELECT_EVENT;
+
+    stateMachine.add_transition(&_upEvent);
+    stateMachine.add_transition(&_backEvent);
+    stateMachine.add_transition(&_downEvent);
+    stateMachine.add_transition(&_selectEvent);
   }
 
-  template <typename TClass, TClass *ptr>
-  static void initialize(Fsm &stateMachine, State *parent)
+  virtual void on_enter()
   {
-    for (unsigned int i = 0; i < ptr->_count; i++)
+    if (!is_current())
     {
-      unsigned int p = (i - 1) % ptr->_count;
-      unsigned int n = (i + 1) % ptr->_count;
-
-      MenuItem &current(ptr->_items[i]);
-      MenuItem &previous(ptr->_items[p]);
-      MenuItem &next(ptr->_items[n]);
-
-      if (i == 0)
-      {
-        stateMachine.add_transition(parent, &current, SELECT_EVENT,
-          &Adaptor<Menu, &Menu::begin, ptr>::bind);
-      }
-
-      stateMachine.add_transition(&current, &previous, UP_EVENT,
-        &Adaptor<Menu, &Menu::up, ptr>::bind);
-      if (current.state != nullptr)
-      {
-        stateMachine.add_transition(&current, current.state, SELECT_EVENT,
-          &Adaptor<Menu, &Menu::end, ptr>::bind);
-      }
-      stateMachine.add_transition(&current, parent, BACK_EVENT, &Adaptor<Menu,
-        &Menu::end, ptr>::bind);
-      stateMachine.add_transition(&current, &next, DOWN_EVENT,
-        &Adaptor<Menu, &Menu::down, ptr>::bind);
+      set_current(0);
+      enable();
     }
+  }
+
+  virtual void on_exit()
+  {
+    // Nothing to do...
+  }
+
+  void up()
+  {
+    set_current(_current - 1);
+  }
+
+  void down()
+  {
+    set_current(_current + 1);
+  }
+
+  void set_current(unsigned int value)
+  {
+    if (value >= 0)
+    {
+      _current = value % _count;
+    }
+    else
+    {
+      _current = _count - 1;
+    }
+
+    _selectEvent.state_to = _items[_current].state_to;
+    _requireRefresh = true;
   }
 
   virtual void draw(TFT &hw)
@@ -57,7 +93,7 @@ struct Menu : public Screen
       Point position(0, 0);
 
       Label lbl(hw.width() / Size_20x32, 0, position, white);
-      for (int i = 0; i < _count && position.y < hw.height(); i++)
+      for (unsigned int i = 0; i < _count && position.y < hw.height(); i++)
       {
         if (i == _current)
         {
@@ -77,42 +113,15 @@ struct Menu : public Screen
     }
   }
 
-  void begin()
-  {
-    _current = 0;
-    _requireRefresh = true;
-    enable();
-  }
-
-  void end()
-  {
-    _current = 0;
-  }
-
-  void up()
-  {
-    if (_current == 0)
-    {
-      _current = (_count - 1);
-    }
-    else
-    {
-      _current -= 1;
-    }
-    _requireRefresh = true;
-  }
-
-  void down()
-  {
-    _current = (_current + 1) % _count;
-    _requireRefresh = true;
-  }
-
 private:
   bool _requireRefresh;
   MenuItem* _items;
   unsigned int _count;
   unsigned int _current;
+  TTransition<Menu> _selectEvent;
+  TTransition<Menu> _backEvent;
+  TTransition<Menu> _upEvent;
+  TTransition<Menu> _downEvent;
 };
 
 #endif

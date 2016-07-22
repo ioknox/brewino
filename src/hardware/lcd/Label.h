@@ -38,7 +38,7 @@ class Label
     void setPosition(const Point &position);
     void setForeColor(const Color& foreColor);
     void setBackColor(const Color& backColor);
-    bool setRequireRefresh(bool refresh);
+    void setRequireRefresh(bool refresh);
     void setFontSize(FontSize fontSize);
 
     virtual void draw(TFT &hw);

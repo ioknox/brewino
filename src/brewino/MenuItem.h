@@ -3,24 +3,14 @@
 
 #include <Fsm.h>
 
-struct MenuItem : public State
+struct MenuItem : public CBTransition
 {
-  State *state;
   String text;
 
-  MenuItem(State *_state, const char *_text)
-    : State(MenuItem::enter, MenuItem::leave)
+  MenuItem(State *_state_to, const char *_text)
   {
-    state = _state;
+    state_to = _state_to;
     text = String(_text);
-  }
-
-  static void enter()
-  {
-  }
-
-  static void leave()
-  {
   }
 };
 

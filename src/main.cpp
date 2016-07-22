@@ -1,3 +1,5 @@
+#include <math.h>
+
 #include <Arduino.h>
 
 #include <SPI.h>
@@ -7,26 +9,17 @@
 #include <TaskScheduler.h>
 #include <Fsm.h>
 
-#include <math.h>
-
-#define SELECT_EVENT 1
-#define CANCEL_EVENT 2
-#define UP_EVENT 3
-#define DOWN_EVENT 4
-#define BACK_EVENT 5
+#include <brewino/MainScreen.h>
+#include <brewino/Menu.h>
+#include <brewino/Screen.h>
+#include <brewino/KeyPad.h>
+#include <brewino/Settings.h>
 
 #define TFT_CS    19
 #define TFT_DC    9
 #define TFT_RESET 8
 
 #define TC_CS     10
-
-#include <util/Adaptor.h>
-
-#include <brewino/Menu.h>
-#include <brewino/Screen.h>
-#include <brewino/KeyPad.h>
-#include <brewino/Settings.h>
 
 void enterIdle();
 void shortCallback();
@@ -56,7 +49,7 @@ PID pid(
   DIRECT
 );
 
-State idle(enterIdle, NULL);
+CBState idle(enterIdle, NULL);
 Fsm screenFsm(&idle);
 
 void enterIdle()
@@ -116,75 +109,121 @@ void longCallback()
   Screen::current()->draw(tft);
 }
 
-class ConsignManager
+struct ConsignManager : public State
 {
 public:
-  static void enter()
+  ConsignManager()
+   : _originalConsign(0.0), _editState(0), _editInit(0)
   {
-    Serial.println(" *** ENTER EDIT CONSIGN *** ");
-    enterIdle();
-    _originalConsign = settings.consign;
-    _editState = 0;
-    editConsign(settings.consign, mainScreen);
+
   }
 
-  static void leave()
+  virtual void on_enter()
   {
-      Serial.println(" *** LEAVE EDIT CONSIGN *** ");
+    if (!mainScreen.is_current())
+    {
+      mainScreen.enable();
+      _originalConsign = settings.consign;
+      _editState = 0;
+      editConsign(settings.consign, mainScreen);
+    }
   }
 
-  static void commit()
+  virtual void on_exit()
   {
-    Serial.println(" *** COMIT CONSIGN *** ");
+  }
+
+  void commit()
+  {
     changeModifiedConsign(settings.consign, mainScreen);
     mainScreen.disableEdit();
   }
 
-  static void rollback()
+  void rollback()
   {
-    Serial.println(" *** ROLLBACK CONSIGN *** ");
     settings.consign = _originalConsign;
     mainScreen.disableEdit();
   }
 
-  static void up()
+  void up()
   {
-    Serial.println(" *** UP *** ");
     mainScreen.incEditDigit();
   }
 
-  static void down()
+  void down()
   {
-    Serial.println(" *** DOWN *** ");
     mainScreen.decEditDigit();
   }
 
-  static void next()
+  void next()
   {
-    Serial.println(" *** NEXT *** ");
     changeModifiedConsign(settings.consign, mainScreen);
     nextDigit();
     editConsign(settings.consign, mainScreen);
   }
 
-private:
-  static double _originalConsign;
-  static short _editState;
-  static short _editInit;
+  void setup(Fsm &stateMachine, State *parent)
+  {
+    _upEvent.state_from = this;
+    _upEvent.state_to = this;
+    _upEvent.instance = this;
+    _upEvent.method = &ConsignManager::up;
+    _upEvent.event = UP_EVENT;
 
-  static void changeModifiedConsign(double &consign, MainScreen &screen)
+    _downEvent.state_from = this;
+    _downEvent.state_to = this;
+    _downEvent.instance = this;
+    _downEvent.method = &ConsignManager::down;
+    _downEvent.event = DOWN_EVENT;
+
+    _nextEvent.state_from = this;
+    _nextEvent.state_to = this;
+    _nextEvent.instance = this;
+    _nextEvent.method = &ConsignManager::next;
+    _nextEvent.event = BACK_EVENT;
+
+    _commitEvent.state_from = this;
+    _commitEvent.state_to = parent;
+    _commitEvent.instance = this;
+    _commitEvent.method = &ConsignManager::commit;
+    _commitEvent.event = SELECT_EVENT;
+
+    _rollbackEvent.state_from = this;
+    _rollbackEvent.state_to = parent;
+    _rollbackEvent.instance = this;
+    _rollbackEvent.method = &ConsignManager::rollback;
+    _rollbackEvent.event = CANCEL_EVENT;
+
+    stateMachine.add_transition(&_upEvent);
+    stateMachine.add_transition(&_downEvent);
+    stateMachine.add_transition(&_nextEvent);
+    stateMachine.add_transition(&_commitEvent);
+    stateMachine.add_transition(&_rollbackEvent);
+  }
+
+private:
+  TTransition<ConsignManager> _upEvent;
+  TTransition<ConsignManager> _downEvent;
+  TTransition<ConsignManager> _nextEvent;
+  TTransition<ConsignManager> _commitEvent;
+  TTransition<ConsignManager> _rollbackEvent;
+  double _originalConsign;
+  short _editState;
+  short _editInit;
+
+  void changeModifiedConsign(double &consign, MainScreen &screen)
   {
     double value = (screen.editDigit() - _editInit) * 10.0;
     value = round(value * pow(10.0, _editState - 1));
     consign += (value / 10.0);
   }
 
-  static void nextDigit()
+  void nextDigit()
   {
     _editState = (_editState + 1) % 4;
   }
 
-  static void editConsign(double &consign, MainScreen &screen)
+  void editConsign(double &consign, MainScreen &screen)
   {
     long value = (long)round(consign * 10.0 / pow(10.0, _editState - 1.0));
     value = (value / 10L) % 10L;
@@ -197,8 +236,17 @@ private:
 class EditScreen : public Screen, public State
 {
   public:
-    EditScreen()
-      : State(NULL, NULL)
+    virtual void on_enter()
+    {
+      enable();
+    }
+
+    virtual void on_exit()
+    {
+
+    }
+
+    virtual void draw(TFT& hw)
     {
 
     }
@@ -213,33 +261,26 @@ class EditScreen : public Screen, public State
       Serial.println("REALLY DUDE...");
     }
 
-
-
-    template<EditScreen *self, void (EditScreen::*mf)()>
-    static void initialize(Fsm &fsm, int event)
+    void setup()
     {
-      fsm.add_transition(self, self, event, Adaptor<EditScreen, mf, self>::bind);
+
     }
 
-    template<EditScreen *self>
-    static void initialize(Fsm &fsm)
-    {
-      initialize<self, &EditScreen::up>(fsm, UP_EVENT);
-      initialize<self, &EditScreen::down>(fsm, DOWN_EVENT);
-    }
-
-
+  private:
+    //TTransition<EditScreen>
 };
 
-double ConsignManager::_originalConsign = 0.0;
-short ConsignManager::_editState = 0;
-short ConsignManager::_editInit = 0;
-
-State onEditConsign(ConsignManager::enter, ConsignManager::leave);
-State onModifiyConsign(NULL, NULL);
-State editSettings(NULL, NULL);
-
+ConsignManager editConsignState;
 EditScreen editKp;
+
+Menu mainMenu;
+Menu settingMenu;
+
+MenuItem mainMenuItems[] =
+{
+  MenuItem(&editConsignState, "Edit consign"),
+  MenuItem(&settingMenu, "Edit settings"),
+};
 
 MenuItem settingMenuItems[] =
 {
@@ -250,14 +291,6 @@ MenuItem settingMenuItems[] =
   MenuItem(NULL, "Output type"),
   MenuItem(NULL, "Bla bla"),
 };
-Menu settingMenu(settingMenuItems, 6);
-
-MenuItem mainMenuItems[] =
-{
-  MenuItem(&onEditConsign, "Edit consign"),
-  MenuItem(NULL, "Edit settings"),
-};
-Menu mainMenu(mainMenuItems, 2);
 
 /**
  *
@@ -266,22 +299,12 @@ void setup()
 {
   Serial.begin(57600);
 
-  Menu::initialize<Menu, &mainMenu>(screenFsm, &idle);
-  Menu::initialize<Menu, &settingMenu>(screenFsm, &mainMenuItems[1]);
+  screenFsm.add_transition(&idle, &mainMenu, SELECT_EVENT, NULL);
 
-  EditScreen::initialize<&editKp>(screenFsm);
+  mainMenu.setup(screenFsm, &idle, mainMenuItems, 2);
+  settingMenu.setup(screenFsm, &mainMenu, settingMenuItems, 6);
 
-  screenFsm.add_transition(&onEditConsign, &idle, SELECT_EVENT, &ConsignManager::commit);
-  screenFsm.add_transition(&onEditConsign, &idle, CANCEL_EVENT, &ConsignManager::rollback);
-  screenFsm.add_transition(&onEditConsign, &onModifiyConsign, UP_EVENT, &ConsignManager::up);
-  screenFsm.add_transition(&onEditConsign, &onModifiyConsign, DOWN_EVENT, &ConsignManager::down);
-  screenFsm.add_transition(&onEditConsign, &onModifiyConsign, BACK_EVENT, &ConsignManager::next);
-
-  screenFsm.add_transition(&onModifiyConsign, &idle, SELECT_EVENT, &ConsignManager::commit);
-  screenFsm.add_transition(&onModifiyConsign, &idle, CANCEL_EVENT, &ConsignManager::rollback);
-  screenFsm.add_transition(&onModifiyConsign, &onModifiyConsign, UP_EVENT, &ConsignManager::up);
-  screenFsm.add_transition(&onModifiyConsign, &onModifiyConsign, DOWN_EVENT, &ConsignManager::down);
-  screenFsm.add_transition(&onModifiyConsign, &onModifiyConsign, BACK_EVENT, &ConsignManager::next);
+  editConsignState.setup(screenFsm, &idle);
 
   tft.begin();
 

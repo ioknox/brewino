@@ -3,7 +3,7 @@
 
 #include <hardware/Button.h>
 
-#include "ButtonsEnum.h"
+#include <brewino/ButtonsEnum.h>
 
 #define KEYPAD_BUTTONS 4
 
