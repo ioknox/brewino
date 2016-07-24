@@ -1,14 +1,20 @@
 #ifndef __MENU_H__
 #define __MENU_H__
 
+#include <brewino/Events.h>
 #include <brewino/Screen.h>
-
-#include "MenuItem.h"
+#include <brewino/MenuItem.h>
 
 class Menu : public Screen, public State
 {
 public:
-  void setup(Fsm &stateMachine, State *parent, MenuItem *items, int count)
+  Menu()
+    :  _count(0), _current(0)
+  {
+
+  }
+
+  void setup(Fsm &stateMachine, State *parent, MenuItem** items, int count)
   {
     _count = count;
     _items = items;
@@ -30,15 +36,19 @@ public:
     _backEvent.instance = NULL;
     _backEvent.event = BACK_EVENT;
 
-    _selectEvent.state_from = this;
-    _selectEvent.state_to = _items[0].state_to;
-    _selectEvent.instance = NULL;
-    _selectEvent.event = SELECT_EVENT;
+    for (unsigned int i = 0; i < _count; i++)
+    {
+      _items[i]->state_from = this;
+      _items[i]->event = NO_EVENT;
+
+      stateMachine.add_transition(_items[i]);
+    }
+
+    _items[0]->event = SELECT_EVENT;
 
     stateMachine.add_transition(&_upEvent);
     stateMachine.add_transition(&_backEvent);
     stateMachine.add_transition(&_downEvent);
-    stateMachine.add_transition(&_selectEvent);
   }
 
   virtual void on_enter()
@@ -67,6 +77,8 @@ public:
 
   void set_current(unsigned int value)
   {
+    _items[_current]->event = NO_EVENT;
+
     if (value >= 0)
     {
       _current = value % _count;
@@ -75,8 +87,7 @@ public:
     {
       _current = _count - 1;
     }
-
-    _selectEvent.state_to = _items[_current].state_to;
+    _items[_current]->event = SELECT_EVENT;
     _requireRefresh = true;
   }
 
@@ -105,7 +116,8 @@ public:
           lbl.setForeColor(white);
           lbl.setBackColor(black);
         }
-        lbl.setValue(_items[i].text);
+
+        lbl.setValue(_items[i]->text);
         lbl.draw(hw);
         position.y += Size_20x32 * 2;
         lbl.setPosition(position);
@@ -115,10 +127,9 @@ public:
 
 private:
   bool _requireRefresh;
-  MenuItem* _items;
+  MenuItem** _items;
   unsigned int _count;
   unsigned int _current;
-  TTransition<Menu> _selectEvent;
   TTransition<Menu> _backEvent;
   TTransition<Menu> _upEvent;
   TTransition<Menu> _downEvent;

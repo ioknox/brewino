@@ -1,6 +1,7 @@
 #ifndef __BREWINO_EVENTS_H__
 #define __BREWINO_EVENTS_H__
 
+#define NO_EVENT 0
 #define SELECT_EVENT 1
 #define CANCEL_EVENT 2
 #define UP_EVENT 3

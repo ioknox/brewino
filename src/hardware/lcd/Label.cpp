@@ -41,6 +41,14 @@ void Label::setValue(int value)
   setValue(left + String(value));
 }
 
+void Label::setValue(const char* value)
+{
+  int len(strlen_P(value));
+  char buffer[len+1];
+  strcpy_P(buffer, value);
+  setValue(String(buffer));
+}
+
 void Label::setValue(const String& value)
 {
   if (!_value.equals(value))

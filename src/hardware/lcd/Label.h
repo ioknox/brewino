@@ -35,6 +35,7 @@ class Label
     void setValue(float value);
     void setValue(int value);
     void setValue(const String& value);
+    void setValue(const char *value);
     void setPosition(const Point &position);
     void setForeColor(const Color& foreColor);
     void setBackColor(const Color& backColor);
