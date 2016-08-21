@@ -9,7 +9,7 @@
 class Screen
 {
 public:
-  virtual void draw(TFT &hw);
+  virtual void draw(Adafruit_ST7735 &hw);
   void enable();
   inline bool is_current() { return this == _current; }
   inline bool changed() { return _changed; }

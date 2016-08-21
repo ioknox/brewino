@@ -1,9 +1,9 @@
 #include <brewino/MainScreen.h>
 
 MainScreen::MainScreen()
-  : _consignLabel(5, 1, Point(0, 32), Color(0, 255, 0)),
-    _currentTempLabel(5, 1, Point(0, 0), Color(255, 0, 0)),
-    _outputLabel(5, 0, Point(0, 64), Color(0, 0, 255))
+  : _consignLabel(5, 1, Point(0, 32), ST7735_GREEN),
+    _currentTempLabel(5, 1, Point(0, 0), ST7735_RED),
+    _outputLabel(5, 0, Point(0, 64), ST7735_BLUE)
 {
   _currentTempLabel.setValue("?");
   _currentTempLabel.setFontSize(Size_20x32);
@@ -15,7 +15,7 @@ MainScreen::MainScreen()
   _outputLabel.setFontSize(Size_20x32);
 }
 
-void MainScreen::draw(TFT &hw)
+void MainScreen::draw(Adafruit_ST7735 &hw)
 {
   if (changed())
   {
@@ -30,16 +30,13 @@ void MainScreen::draw(TFT &hw)
   _currentTempLabel.draw(hw);
   _outputLabel.draw(hw);
 
-  hw.stroke(255, 255, 255);
+  uint16_t color(ST7735_BLACK);
   if (_aliveFlag)
   {
-    hw.fill(255, 255, 255);
+    color = ST7735_WHITE;
   }
-  else
-  {
-    hw.fill(0, 0, 0);
-  }
-  hw.rect(150, 120, 8, 8);
+
+  hw.fillRect(150, 120, 8, 8, color);
   _aliveFlag = !_aliveFlag;
 }
 

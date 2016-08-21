@@ -1,6 +1,6 @@
 #include "Label.h"
 
-Label::Label(byte size, byte decimals, const Point &pt, const Color &foreColor)
+Label::Label(byte size, byte decimals, const Point &pt, const uint16_t &foreColor)
   : _position(pt),
     _foreColor(foreColor),
     _fontSize(Size_5x8),
@@ -64,13 +64,13 @@ void Label::setPosition(const Point &position)
   _requireRefresh = true;
 }
 
-void Label::setForeColor(const Color& foreColor)
+void Label::setForeColor(const uint16_t& foreColor)
 {
   _foreColor = foreColor;
   _requireRefresh = true;
 }
 
-void Label::setBackColor(const Color& backColor)
+void Label::setBackColor(const uint16_t& backColor)
 {
   _backColor = backColor;
   _requireRefresh = true;
@@ -91,7 +91,7 @@ void Label::setFontSize(FontSize fontSize)
   }
 }
 
-void Label::draw(TFT &hw)
+void Label::draw(Adafruit_ST7735 &hw)
 {
   if (!_requireRefresh)
   {
@@ -101,13 +101,11 @@ void Label::draw(TFT &hw)
   char valueBuf[_size + 1];
   _value.toCharArray(valueBuf, _size + 1);
 
-  hw.noStroke();
-  hw.fill(_backColor.r, _backColor.g, _backColor.b);
-  hw.rect(_position.x, _position.y, _size * _fontSize * 6, _fontSize * 8);
-  hw.noFill();
+  hw.fillRect(_position.x, _position.y, _size * _fontSize * 6, _fontSize * 8, _backColor);
   hw.setTextSize(_fontSize);
-  hw.stroke(_foreColor.r, _foreColor.g, _foreColor.b);
-  hw.text(valueBuf, _position.x, _position.y);
+  hw.setTextColor(_foreColor);
+  hw.setCursor(_position.x, _position.y);
+  hw.print(valueBuf);
 
   _requireRefresh = false;
 }

@@ -4,9 +4,9 @@
 const char undefineValue[] PROGMEM = { "?" };
 
 EditScreen::EditScreen()
-  : _displayLabel(5, 1, Point(0, 32), Color(0, 255, 0)),
-    _editLabel(1, 0, Point(0, 32), Color(255, 255, 255)),
-    _titleLabel(30, 0, Point(0, 0), Color(255, 255, 255))
+  : _displayLabel(5, 1, Point(0, 32), ST7735_GREEN),
+    _editLabel(1, 0, Point(0, 32), ST7735_WHITE),
+    _titleLabel(30, 0, Point(0, 0), ST7735_WHITE)
 {
     _titleLabel.setValue(undefineValue);
     _titleLabel.setFontSize(Size_20x32);
@@ -31,7 +31,7 @@ void EditScreen::on_exit()
 
 }
 
-void EditScreen::draw(TFT& hw)
+void EditScreen::draw(Adafruit_ST7735& hw)
 {
     Screen::draw(hw);
 

@@ -1,10 +1,9 @@
 #ifndef __LABEL_H__
 #define __LABEL_H__
 
-#include <TFT.h>
+#include <Adafruit_ST7735.h>
 
 #include <util/Point.h>
-#include <util/Color.h>
 
 enum FontSize
 {
@@ -21,12 +20,12 @@ enum FontSize
 class Label
 {
   public:
-    Label(byte size, byte decimals, const Point &pt, const Color &foreColor);
+    Label(byte size, byte decimals, const Point &pt, const uint16_t &foreColor);
 
     inline const String& value() { return _value; }
     inline const Point& position() { return _position; }
-    inline const Color& foreColor() { return _foreColor; }
-    inline const Color& backColor() { return _backColor; }
+    inline const uint16_t foreColor() { return _foreColor; }
+    inline const uint16_t backColor() { return _backColor; }
     inline const int size() { return _size; }
     inline const int decimals() { return _decimals; }
     inline const bool requireRefresh() { return _requireRefresh; }
@@ -37,17 +36,17 @@ class Label
     void setValue(const String& value);
     void setValue(const char *value);
     void setPosition(const Point &position);
-    void setForeColor(const Color& foreColor);
-    void setBackColor(const Color& backColor);
+    void setForeColor(const uint16_t& foreColor);
+    void setBackColor(const uint16_t& backColor);
     void setRequireRefresh(bool refresh);
     void setFontSize(FontSize fontSize);
 
-    virtual void draw(TFT &hw);
+    virtual void draw(Adafruit_ST7735 &hw);
 
   private:
     Point _position;
-    Color _foreColor;
-    Color _backColor;
+    uint16_t _foreColor;
+    uint16_t _backColor;
     FontSize _fontSize;
     String _value;
     bool _requireRefresh;

@@ -91,7 +91,7 @@ public:
     _requireRefresh = true;
   }
 
-  virtual void draw(TFT &hw)
+  virtual void draw(Adafruit_ST7735 &hw)
   {
     Screen::draw(hw);
 
@@ -99,8 +99,8 @@ public:
     {
       _requireRefresh = false;
 
-      Color white(255, 255, 255);
-      Color black(0, 0, 0);
+      uint16_t white(ST7735_WHITE);
+      uint16_t black(ST7735_BLACK);
       Point position(0, 0);
 
       Label lbl(hw.width() / Size_20x32, 0, position, white);

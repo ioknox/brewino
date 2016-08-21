@@ -12,7 +12,7 @@ class EditScreen : public Screen, public State
     EditScreen();
     virtual void on_enter();
     virtual void on_exit();
-    virtual void draw(TFT& hw);
+    virtual void draw(Adafruit_ST7735& hw);
     void commit();
     void rollback();
     void up();

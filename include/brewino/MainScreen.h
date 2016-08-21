@@ -7,7 +7,7 @@ class MainScreen : public Screen
 {
   public:
     MainScreen();
-    virtual void draw(TFT &hw);
+    virtual void draw(Adafruit_ST7735 &hw);
     void setOutput(float output);
     void setConsign(float consign);
     void setTemp(float currentTemp);

@@ -1,10 +1,10 @@
 #include <brewino/Screen.h>
 
-void Screen::draw(TFT &hw)
+void Screen::draw(Adafruit_ST7735 &hw)
 {
   if (_changed)
   {
-    hw.background(0, 0, 0);
+    hw.fillScreen(ST7735_BLACK);
     _changed = false;
   }
 }
