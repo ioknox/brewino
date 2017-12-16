@@ -8,6 +8,7 @@
 #include <Servo.h>
 #include <TaskScheduler.h>
 #include <Fsm.h>
+#include <TFT.h>
 
 #include <brewino/MainScreen.h>
 #include <brewino/Menu.h>
@@ -72,7 +73,7 @@ ISR(WDT_vect){
 }// watchdog interrup
 */
 
-#define TFT_CS    19
+#define TFT_CS    7
 #define TFT_DC    9
 #define TFT_RESET 8
 
@@ -93,12 +94,12 @@ Task longTask(100, TASK_FOREVER, &longCallback);
 byte counter = 0;
 double input = 0.0;
 double output = 0.0;
-Settings settings;
+//Settings settings;
 KeyPad keyPad;
-MainScreen mainScreen;
+//MainScreen mainScreen;
 
-Adafruit_ST7735 tft(TFT_CS, TFT_DC, TFT_RESET);
-PID pid(
+TFT tft(TFT_CS, TFT_DC, TFT_RESET);
+/*PID pid(
   &input,
   &output,
   &settings.consign,
@@ -107,10 +108,10 @@ PID pid(
   settings.derivate,
   DIRECT
 );
-PID_ATune aTune(&input, &output);
+PID_ATune aTune(&input, &output);*/
 
-CBState idle(enterIdle, NULL);
-Fsm screenFsm(&idle);
+//CBState idle(enterIdle, NULL);
+//Fsm screenFsm(&idle);
 /*
 EditScreen editConsignState;
 EditScreen editScreen;
@@ -149,11 +150,12 @@ MenuItem* settingMenuItems[] =
     &autoItem,
     &outputItem
 };
-*/
+
 void enterIdle()
 {
   mainScreen.enable();
 }
+*/
 
 void shortCallback()
 {
@@ -161,7 +163,7 @@ void shortCallback()
 
   ButtonsEnum longEvt = keyPad.event(LongKeyDown);
   ButtonsEnum shortEvt = keyPad.event(ShortKeyUp);
-
+/*
   if ((longEvt & SetButton) != 0)
   {
     screenFsm.trigger(CANCEL_EVENT);
@@ -181,11 +183,12 @@ void shortCallback()
   else if ((shortEvt & RightButton) != 0)
   {
     screenFsm.trigger(BACK_EVENT);
-  }
+  }*/
 }
 
 void longCallback()
 {
+  /*
   if ((counter % 50) == 0)
   {
     float voltage = (analogRead(A3) * 3.3f) / 1024.0f;
@@ -204,6 +207,7 @@ void longCallback()
   Screen::current()->draw(tft);
 
   counter++;
+  */
 }
 
 /**
@@ -211,7 +215,8 @@ void longCallback()
  */
 void setup()
 {
-  SerialUSB.begin(57600);
+  SPI.begin();
+  BoardSerial.begin(57600);
 /*
   screenFsm.add_transition(&idle, &mainMenu, SELECT_EVENT, NULL);
   mainMenu.setup(screenFsm, &idle, mainMenuItems, 2);
@@ -219,10 +224,11 @@ void setup()
   editConsignState.setup(screenFsm, &idle);
   editScreen.setup(screenFsm, &idle);
 */
-  tft.initR(INITR_BLACKTAB);  // Initialize 1.8" TFT
+  tft.begin();
 
-  SerialUSB.println("OK!");
-  tft.fillScreen(ST7735_BLACK);
+  BoardSerial.println("OK!");
+
+  tft.fillRect(0, 0, 160, 128, ST7735_RED);
 /*
   mainScreen.enable();
 
@@ -247,7 +253,5 @@ void setup()
 
 void loop()
 {
-  SerialUSB.println("Hello world");
-  delay(1000);
-  //sched.execute();
+  sched.execute();
 }
